@@ -41,8 +41,66 @@ message ChromeBuildProto {
   optional Channel channel = 3;
 }
 
+// Build characteristics for Android devices
+message AndroidBuildProto {
+  // Build.FINGERPRINT
+  // eg. google/redfin/redfin:13/TQ3A.230805.001/10316531:user/release-keys
+  optional string fingerprint = 1;
+
+  // Build.HARDWARE
+  // eg. redfin
+  optional string hardware = 2;
+
+  // Build.BRAND
+  // eg. google
+  optional string brand = 3;
+
+  // Build.getRadioVersion()
+  optional string radio = 4;
+
+  // Build.BOOTLOADER
+  // eg. slider-1.2-9608154
+  optional string bootloader = 5;
+
+  // GoogleSettingsContract.Partner["client_id"]
+  // eg. android-google
+  optional string client_id = 6;
+
+  // Build.TIME / 1000L
+  optional int64 time = 7;
+
+  // PackageInfo.versionCode
+  optional int32 package_version_code = 8;
+
+  // Build.DEVICE
+  // eg. redfin
+  optional string device = 9;
+
+  // Build.VERSION.SDK_INT
+  // eg. 33
+  optional int32 sdk_version = 10;
+
+  // Build.MODEL
+  // eg. Pixel 5
+  optional string model = 11;
+
+  // Build.MANUFACTURER
+  // eg. Google
+  optional string manufacturer = 12;
+
+  // Build.PRODUCT
+  // eg. redfin
+  optional string product = 13;
+
+  // fileExists("/system/recovery-from-boot.p")
+  optional bool ota_installed = 14;
+}
+
 // Information sent by the device in a "checkin" request.
 message AndroidCheckinProto {
+  // Android build info - required for Android device checkins
+  optional AndroidBuildProto build = 1;
+
   // Miliseconds since the Unix epoch of the device's last successful checkin.
   optional int64 last_checkin_msec = 2;
 

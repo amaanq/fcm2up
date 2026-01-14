@@ -44,20 +44,44 @@ impl GcmSession {
     ) -> Result<Self, Error> {
         use prost::Message;
 
-        // Use Android device type (3) with Chrome build info
-        // This mimics what an Android device would send
+        // Use Android device type with proper Android build info
+        // This mimics what a real Android device (Pixel 5) would send
         let request = contract::AndroidCheckinRequest {
             version: Some(3),
             id: android_id,
             security_token,
             user_serial_number: Some(0),
+            fragment: Some(if android_id.is_some() { 1 } else { 0 }),
+            locale: Some("en_US".into()),
+            time_zone: Some("America/Los_Angeles".into()),
+            logging_id: Some(rand::random::<i64>().abs()),
+            // OTA cert from microG - base64 SHA1 of system OTA cert
+            ota_cert: vec!["71Q6Rn2DDZl1zPDVaaeEHItd".into()],
+            // Account cookie - empty on first checkin per microG
+            account_cookie: vec!["".into()],
             checkin: contract::AndroidCheckinProto {
-                r#type: Some(3), // DEVICE_CHROME_BROWSER
-                chrome_build: Some(contract::ChromeBuildProto {
-                    platform: Some(2), // PLATFORM_ANDROID
-                    channel: Some(1),  // CHANNEL_STABLE
-                    chrome_version: Some(String::from("63.0.3234.0")),
+                r#type: Some(1), // DEVICE_ANDROID_OS
+                build: Some(contract::AndroidBuildProto {
+                    fingerprint: Some(
+                        "google/redfin/redfin:14/AP2A.240805.005/12025142:user/release-keys".into(),
+                    ),
+                    hardware: Some("redfin".into()),
+                    brand: Some("google".into()),
+                    radio: Some("g7250-00217-231219-B-11446880".into()),
+                    bootloader: Some("slider-1.2-10323765".into()),
+                    client_id: Some("android-google".into()),
+                    time: Some(1722859200), // Aug 2024
+                    device: Some("redfin".into()),
+                    sdk_version: Some(34),
+                    model: Some("Pixel 5".into()),
+                    manufacturer: Some("Google".into()),
+                    product: Some("redfin".into()),
+                    ota_installed: Some(false),
+                    ..Default::default()
                 }),
+                last_checkin_msec: Some(0),
+                roaming: Some("WIFI::".into()),
+                user_number: Some(0),
                 ..Default::default()
             },
             ..Default::default()
@@ -65,10 +89,14 @@ impl GcmSession {
 
         const API_NAME: &str = "GCM checkin";
 
+        // User-Agent matching microG's CheckinClient.java
+        let user_agent = "Android-Checkin/2.0 (redfin AP2A.240805.005); gzip";
+
         let response = http
             .post(CHECKIN_URL)
             .body(request.encode_to_vec())
             .header(reqwest::header::CONTENT_TYPE, "application/x-protobuf")
+            .header(reqwest::header::USER_AGENT, user_agent)
             .send()
             .await
             .map_err(|e| Error::Request(API_NAME, e))?;
@@ -125,29 +153,20 @@ impl GcmSession {
         cert_sha1: Option<&str>,
     ) -> Result<GcmToken, Error> {
         let android_id = self.android_id.to_string();
-        // GMS uses: AidLogin <android_id>:<security_token>
+        // microG uses: AidLogin <android_id>:<security_token>
         let auth_header = format!("AidLogin {}:{}", &android_id, &self.security_token);
+        // User-Agent matching microG: Android-GCM/1.5 (device buildId)
+        let user_agent = "Android-GCM/1.5 (redfin AP2A.240805.005)";
 
-        // Build registration parameters matching what actual GMS sends
-        // See bvaz.java:265-284 in GMS source
-        let mut params = std::collections::HashMap::with_capacity(12);
+        // Build registration parameters matching microG's RegisterRequest.java EXACTLY
+        // microG only sends: app, cert, app_ver, info, sender, device, target_ver
+        let mut params = std::collections::HashMap::with_capacity(8);
         params.insert("app", package_name);
         params.insert("device", &android_id);
         params.insert("sender", sender_id);
-        params.insert("X-subtype", sender_id); // Required per ccdl.java:134
-
-        // GCM version (from GMS source)
-        params.insert("gcm_ver", "254730035");
-        params.insert("plat", "0");
+        params.insert("info", "");
         params.insert("app_ver", "1");
-        params.insert("target_ver", "33");
-
-        // Add Firebase app ID if provided
-        let firebase_app_id_str;
-        if let Some(app_id) = firebase_app_id {
-            firebase_app_id_str = app_id.to_string();
-            params.insert("gmp_app_id", &firebase_app_id_str);
-        }
+        params.insert("target_ver", "34");
 
         // Add cert if provided (must be lowercase hex!)
         let cert_lower;
@@ -165,6 +184,8 @@ impl GcmSession {
             .post(REGISTER_URL)
             .form(&params)
             .header(reqwest::header::AUTHORIZATION, auth_header)
+            .header(reqwest::header::USER_AGENT, user_agent)
+            .header("app", package_name)
             .send()
             .await
             .map_err(|e| Error::Request(API_NAME, e))?;
