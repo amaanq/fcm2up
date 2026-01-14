@@ -1,0 +1,13 @@
+/target
+**/target
+/.direnv
+**/.direnv
+/result
+**/result
+*.swp
+*.swo
+.DS_Store
+.gradle
+**/build
+**/*.db
+local.properties
