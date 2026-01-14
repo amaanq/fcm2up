@@ -258,25 +258,46 @@ fn patch_application_on_create(
         return Ok(());
     }
 
-    // Inject initialization code into onCreate
+    // First, find the current .locals count for onCreate
+    let locals_pattern = r"\.method[^\n]*onCreate\(\)V[^\n]*\n\s*\.locals (\d+)";
+    let re_locals = Regex::new(locals_pattern)?;
+    let current_locals: u32 = re_locals
+        .captures(&content)
+        .and_then(|c| c.get(1))
+        .and_then(|m| m.as_str().parse().ok())
+        .unwrap_or(4);
+
+    // We need 5 registers for our code (context + 4 args)
+    // Use registers at the end of the range to avoid clobbering
+    let base_reg = current_locals;
+    let new_locals = current_locals + 5;
+
+    // Generate init code using high registers and invoke-static/range
+    // Note: const/4 only works with v0-v15, use const/16 for high registers
     let init_code = format!(
         r#"
     # FCM2UP: Initialize shim
-    const-string v0, "{}"
-    const-string v1, "{}"
-    const/4 v2, 0x0
-    const/4 v3, 0x0
-    invoke-static {{p0, v0, v1, v2, v3}}, Lcom/fcm2up/Fcm2UpShim;->configure(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+    move-object/from16 v{base}, p0
+    const-string v{url}, "{bridge_url}"
+    const-string v{dist}, "{distributor}"
+    const/16 v{n1}, 0x0
+    const/16 v{n2}, 0x0
+    invoke-static/range {{v{base} .. v{n2}}}, Lcom/fcm2up/Fcm2UpShim;->configure(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
 
     # FCM2UP: Register with UnifiedPush
-    invoke-static {{p0}}, Lcom/fcm2up/Fcm2UpShim;->register(Landroid/content/Context;)V
+    invoke-static/range {{v{base} .. v{base}}}, Lcom/fcm2up/Fcm2UpShim;->register(Landroid/content/Context;)V
 "#,
-        bridge_url, distributor
+        base = base_reg,
+        url = base_reg + 1,
+        dist = base_reg + 2,
+        n1 = base_reg + 3,
+        n2 = base_reg + 4,
+        bridge_url = bridge_url,
+        distributor = distributor
     );
 
     // Find onCreate and inject after super.onCreate()
-    let super_oncreate_pattern =
-        r"(invoke-\w+ \{[^}]*\}, L[^;]+;->onCreate\(\)V)";
+    let super_oncreate_pattern = r"(invoke-\w+ \{[^}]*\}, L[^;]+;->onCreate\(\)V)";
     let re = Regex::new(super_oncreate_pattern)?;
 
     let new_content = if re.is_match(&content) {
@@ -300,30 +321,17 @@ fn patch_application_on_create(
         }
     };
 
-    // Ensure we have enough registers
-    let new_content = ensure_registers(&new_content, "onCreate", 4)?;
+    // Update .locals count
+    let new_content = re_locals
+        .replace(&new_content, |caps: &regex::Captures| {
+            caps[0].replace(&format!(".locals {}", current_locals), &format!(".locals {}", new_locals))
+        })
+        .to_string();
 
     fs::write(smali_path, new_content)?;
-    println!("  Injected init code into Application.onCreate");
+    println!("  Injected init code into Application.onCreate (using v{}-v{})", base_reg, base_reg + 4);
 
     Ok(())
-}
-
-/// Ensure a method has at least N registers
-fn ensure_registers(content: &str, method_name: &str, min_registers: u32) -> Result<String> {
-    let pattern = format!(
-        r"(\.method[^\n]*{}\([^\)]*\)[^\n]*\n\s*)\.locals (\d+)",
-        regex::escape(method_name)
-    );
-    let re = Regex::new(&pattern)?;
-
-    let result = re.replace(content, |caps: &regex::Captures| {
-        let current: u32 = caps[2].parse().unwrap_or(0);
-        let new_count = current.max(min_registers);
-        format!("{}.locals {}", &caps[1], new_count)
-    });
-
-    Ok(result.to_string())
 }
 
 /// Create a ContentProvider to initialize fcm2up if no Application class
