@@ -25,10 +25,7 @@
             version = "0.1.0";
             src = ./.;
 
-            cargoLock = {
-              lockFile = ./bridge/Cargo.lock;
-              outputHashes = {};
-            };
+            cargoLock.lockFile = ./Cargo.lock;
 
             # Build only the bridge package
             buildAndTestSubdir = "bridge";
