@@ -122,16 +122,29 @@ fn inject_shim_dex(decoded_dir: &Path, shim_dex_path: Option<&Path>) -> Result<(
 
     println!("  Using shim: {}", shim_dex.display());
 
-    // Convert DEX to smali using baksmali
-    let status = std::process::Command::new("baksmali")
-        .args(["d", "-o"])
-        .arg(&target_smali_dir)
-        .arg(&shim_dex)
-        .status()
-        .context("Failed to run baksmali. Is it installed?")?;
+    // Look for pre-generated smali files next to the DEX
+    let shim_smali_dir = shim_dex.parent().map(|p| p.join("smali"));
 
-    if !status.success() {
-        bail!("baksmali failed to disassemble shim DEX");
+    if let Some(ref smali_dir) = shim_smali_dir {
+        if smali_dir.exists() && smali_dir.is_dir() {
+            // Copy pre-generated smali files
+            println!("  Using pre-generated smali from: {}", smali_dir.display());
+            copy_dir_recursive(smali_dir, &target_smali_dir)?;
+        } else {
+            // Fall back to baksmali
+            let status = std::process::Command::new("baksmali")
+                .args(["d", "-o"])
+                .arg(&target_smali_dir)
+                .arg(&shim_dex)
+                .status()
+                .context("Failed to run baksmali. Is it installed? Or provide pre-generated smali files.")?;
+
+            if !status.success() {
+                bail!("baksmali failed to disassemble shim DEX");
+            }
+        }
+    } else {
+        bail!("Invalid shim DEX path");
     }
 
     // Count injected classes
@@ -415,5 +428,28 @@ fn create_init_provider(decoded_dir: &Path, bridge_url: &str, distributor: &str)
     }
 
     println!("  Created init ContentProvider");
+    Ok(())
+}
+
+/// Recursively copy a directory
+fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
+    fs::create_dir_all(dst)?;
+
+    for entry in WalkDir::new(src) {
+        let entry = entry?;
+        let src_path = entry.path();
+        let relative = src_path.strip_prefix(src)?;
+        let dst_path = dst.join(relative);
+
+        if entry.file_type().is_dir() {
+            fs::create_dir_all(&dst_path)?;
+        } else {
+            if let Some(parent) = dst_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::copy(src_path, &dst_path)?;
+        }
+    }
+
     Ok(())
 }
