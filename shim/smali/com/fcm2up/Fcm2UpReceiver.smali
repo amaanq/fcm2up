@@ -1,26 +1,34 @@
 .class public final Lcom/fcm2up/Fcm2UpReceiver;
 .super Landroid/content/BroadcastReceiver;
-.source "SourceFile"
+.source "Fcm2UpReceiver.kt"
 
 
 # annotations
+.annotation system Ldalvik/annotation/MemberClasses;
+    value = {
+        Lcom/fcm2up/Fcm2UpReceiver$Companion;
+    }
+.end annotation
+
 .annotation runtime Lkotlin/Metadata;
     d1 = {
-        "\u0000\u001c\n\u0002\u0018\u0002\n\u0002\u0018\u0002\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0010\u0002\n\u0002\u0008\u0006\u0018\u0000 \n2\u00020\u0001:\u0001\u000bB\u0007\u00a2\u0006\u0004\u0008\u0008\u0010\tJ\u0018\u0010\u0007\u001a\u00020\u00062\u0006\u0010\u0003\u001a\u00020\u00022\u0006\u0010\u0005\u001a\u00020\u0004H\u0016\u00a8\u0006\u000c"
+        "\u0000 \n\u0002\u0018\u0002\n\u0002\u0018\u0002\n\u0002\u0008\u0002\n\u0002\u0010\u0002\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\u0008\u0006\u0018\u0000 \r2\u00020\u0001:\u0001\rB\u0005\u00a2\u0006\u0002\u0010\u0002J\u0018\u0010\u0003\u001a\u00020\u00042\u0006\u0010\u0005\u001a\u00020\u00062\u0006\u0010\u0007\u001a\u00020\u0008H\u0002J\u0018\u0010\t\u001a\u00020\u00042\u0006\u0010\u0005\u001a\u00020\u00062\u0006\u0010\u0007\u001a\u00020\u0008H\u0002J\u0018\u0010\n\u001a\u00020\u00042\u0006\u0010\u0005\u001a\u00020\u00062\u0006\u0010\u0007\u001a\u00020\u0008H\u0002J\u0010\u0010\u000b\u001a\u00020\u00042\u0006\u0010\u0005\u001a\u00020\u0006H\u0002J\u0018\u0010\u000c\u001a\u00020\u00042\u0006\u0010\u0005\u001a\u00020\u00062\u0006\u0010\u0007\u001a\u00020\u0008H\u0016\u00a8\u0006\u000e"
     }
     d2 = {
         "Lcom/fcm2up/Fcm2UpReceiver;",
         "Landroid/content/BroadcastReceiver;",
-        "Landroid/content/Context;",
-        "context",
-        "Landroid/content/Intent;",
-        "intent",
-        "",
-        "onReceive",
-        "<init>",
         "()V",
+        "handleMessage",
+        "",
+        "context",
+        "Landroid/content/Context;",
+        "intent",
+        "Landroid/content/Intent;",
+        "handleNewEndpoint",
+        "handleRegistrationFailed",
+        "handleUnregistered",
+        "onReceive",
         "Companion",
-        "a/a",
         "fcm2up-shim_release"
     }
     k = 0x1
@@ -29,24 +37,41 @@
         0x9,
         0x0
     }
+    xi = 0x30
 .end annotation
 
 
 # static fields
-.field public static final Companion:La/a;
+.field private static final ACTION_MESSAGE:Ljava/lang/String; = "org.unifiedpush.android.connector.MESSAGE"
+
+.field private static final ACTION_NEW_ENDPOINT:Ljava/lang/String; = "org.unifiedpush.android.connector.NEW_ENDPOINT"
+
+.field private static final ACTION_REGISTRATION_FAILED:Ljava/lang/String; = "org.unifiedpush.android.connector.REGISTRATION_FAILED"
+
+.field private static final ACTION_UNREGISTERED:Ljava/lang/String; = "org.unifiedpush.android.connector.UNREGISTERED"
+
+.field public static final Companion:Lcom/fcm2up/Fcm2UpReceiver$Companion;
+
+.field private static final EXTRA_BYTES_MESSAGE:Ljava/lang/String; = "bytesMessage"
+
+.field private static final EXTRA_ENDPOINT:Ljava/lang/String; = "endpoint"
+
+.field private static final EXTRA_MESSAGE:Ljava/lang/String; = "message"
+
+.field private static final TAG:Ljava/lang/String; = "FCM2UP"
 
 
 # direct methods
 .method static constructor <clinit>()V
-    .registers 1
+    .registers 2
 
-    new-instance v0, La/a;
+    new-instance v0, Lcom/fcm2up/Fcm2UpReceiver$Companion;
 
-    .line 1
-    invoke-direct {v0}, La/a;-><init>()V
+    const/4 v1, 0x0
 
-    .line 2
-    sput-object v0, Lcom/fcm2up/Fcm2UpReceiver;->Companion:La/a;
+    invoke-direct {v0, v1}, Lcom/fcm2up/Fcm2UpReceiver$Companion;-><init>(Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+
+    sput-object v0, Lcom/fcm2up/Fcm2UpReceiver;->Companion:Lcom/fcm2up/Fcm2UpReceiver$Companion;
 
     return-void
 .end method
@@ -54,15 +79,145 @@
 .method public constructor <init>()V
     .registers 1
 
+    .line 21
     invoke-direct {p0}, Landroid/content/BroadcastReceiver;-><init>()V
 
+    return-void
+.end method
+
+.method private final handleMessage(Landroid/content/Context;Landroid/content/Intent;)V
+    .registers 7
+    .param p1, "context"    # Landroid/content/Context;
+    .param p2, "intent"    # Landroid/content/Intent;
+
+    .line 53
+    const-string v0, "bytesMessage"
+
+    invoke-virtual {p2, v0}, Landroid/content/Intent;->getByteArrayExtra(Ljava/lang/String;)[B
+
+    move-result-object v0
+
+    .line 54
+    .local v0, "bytes":[B
+    if-eqz v0, :cond_c
+
+    .line 55
+    invoke-static {p1, v0}, Lcom/fcm2up/Fcm2UpShim;->onMessage(Landroid/content/Context;[B)V
+
+    .line 56
+    return-void
+
+    .line 60
+    :cond_c
+    const-string v1, "message"
+
+    invoke-virtual {p2, v1}, Landroid/content/Intent;->getStringExtra(Ljava/lang/String;)Ljava/lang/String;
+
+    move-result-object v1
+
+    .line 61
+    .local v1, "message":Ljava/lang/String;
+    if-eqz v1, :cond_23
+
+    .line 62
+    sget-object v2, Lkotlin/text/Charsets;->UTF_8:Ljava/nio/charset/Charset;
+
+    invoke-virtual {v1, v2}, Ljava/lang/String;->getBytes(Ljava/nio/charset/Charset;)[B
+
+    move-result-object v2
+
+    const-string v3, "getBytes(...)"
+
+    invoke-static {v2, v3}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullExpressionValue(Ljava/lang/Object;Ljava/lang/String;)V
+
+    invoke-static {p1, v2}, Lcom/fcm2up/Fcm2UpShim;->onMessage(Landroid/content/Context;[B)V
+
+    .line 63
+    return-void
+
+    .line 66
+    :cond_23
+    const-string v2, "FCM2UP"
+
+    const-string v3, "MESSAGE intent without message data"
+
+    invoke-static {v2, v3}, Landroid/util/Log;->w(Ljava/lang/String;Ljava/lang/String;)I
+
+    .line 67
+    return-void
+.end method
+
+.method private final handleNewEndpoint(Landroid/content/Context;Landroid/content/Intent;)V
+    .registers 6
+    .param p1, "context"    # Landroid/content/Context;
+    .param p2, "intent"    # Landroid/content/Intent;
+
+    .line 70
+    const-string v0, "endpoint"
+
+    invoke-virtual {p2, v0}, Landroid/content/Intent;->getStringExtra(Ljava/lang/String;)Ljava/lang/String;
+
+    move-result-object v0
+
+    .line 71
+    .local v0, "endpoint":Ljava/lang/String;
+    if-eqz v0, :cond_c
+
+    .line 72
+    invoke-static {p1, v0}, Lcom/fcm2up/Fcm2UpShim;->onNewEndpoint(Landroid/content/Context;Ljava/lang/String;)V
+
+    goto :goto_13
+
+    .line 74
+    :cond_c
+    const-string v1, "FCM2UP"
+
+    const-string v2, "NEW_ENDPOINT intent without endpoint"
+
+    invoke-static {v1, v2}, Landroid/util/Log;->w(Ljava/lang/String;Ljava/lang/String;)I
+
+    .line 76
+    :goto_13
+    return-void
+.end method
+
+.method private final handleRegistrationFailed(Landroid/content/Context;Landroid/content/Intent;)V
+    .registers 4
+    .param p1, "context"    # Landroid/content/Context;
+    .param p2, "intent"    # Landroid/content/Intent;
+
+    .line 79
+    const-string v0, "message"
+
+    invoke-virtual {p2, v0}, Landroid/content/Intent;->getStringExtra(Ljava/lang/String;)Ljava/lang/String;
+
+    move-result-object v0
+
+    .line 80
+    .local v0, "reason":Ljava/lang/String;
+    invoke-static {p1, v0}, Lcom/fcm2up/Fcm2UpShim;->onRegistrationFailed(Landroid/content/Context;Ljava/lang/String;)V
+
+    .line 81
+    return-void
+.end method
+
+.method private final handleUnregistered(Landroid/content/Context;)V
+    .registers 2
+    .param p1, "context"    # Landroid/content/Context;
+
+    .line 84
+    invoke-static {p1}, Lcom/fcm2up/Fcm2UpShim;->onUnregistered(Landroid/content/Context;)V
+
+    .line 85
     return-void
 .end method
 
 
 # virtual methods
 .method public onReceive(Landroid/content/Context;Landroid/content/Intent;)V
-    .registers 8
+    .registers 6
+    .param p1, "context"    # Landroid/content/Context;
+    .param p2, "intent"    # Landroid/content/Intent;
 
     const-string v0, "context"
 
@@ -72,6 +227,7 @@
 
     invoke-static {p2, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
 
+    .line 39
     invoke-virtual {p2}, Landroid/content/Intent;->getAction()Ljava/lang/String;
 
     move-result-object v0
@@ -80,10 +236,24 @@
 
     return-void
 
+    .line 41
+    .local v0, "action":Ljava/lang/String;
     :cond_11
-    const-string v1, "Received action: "
+    new-instance v1, Ljava/lang/StringBuilder;
 
-    invoke-virtual {v1, v0}, Ljava/lang/String;->concat(Ljava/lang/String;)Ljava/lang/String;
+    invoke-direct {v1}, Ljava/lang/StringBuilder;-><init>()V
+
+    const-string v2, "Received action: "
+
+    invoke-virtual {v1, v2}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+
+    move-result-object v1
+
+    invoke-virtual {v1, v0}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+
+    move-result-object v1
+
+    invoke-virtual {v1}, Ljava/lang/StringBuilder;->toString()Ljava/lang/String;
 
     move-result-object v1
 
@@ -91,154 +261,96 @@
 
     invoke-static {v2, v1}, Landroid/util/Log;->d(Ljava/lang/String;Ljava/lang/String;)I
 
+    .line 43
     invoke-virtual {v0}, Ljava/lang/String;->hashCode()I
 
     move-result v1
 
-    const v3, -0x52c601c5
+    sparse-switch v1, :sswitch_data_66
 
-    const-string v4, "message"
+    :goto_30
+    goto :goto_64
 
-    if-eq v1, v3, :cond_71
-
-    const v3, -0x1eb5b3f9
-
-    if-eq v1, v3, :cond_64
-
-    const v3, -0x18334929
-
-    if-eq v1, v3, :cond_53
-
-    const v3, 0x62b723a0
-
-    if-eq v1, v3, :cond_38
-
-    goto/16 :goto_a0
-
-    :cond_38
+    :sswitch_31
     const-string v1, "org.unifiedpush.android.connector.NEW_ENDPOINT"
 
     invoke-virtual {v0, v1}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
 
-    move-result v0
+    move-result v1
 
-    if-nez v0, :cond_41
+    if-nez v1, :cond_3a
 
-    goto :goto_a0
+    goto :goto_30
 
-    .line 1
-    :cond_41
-    const-string v0, "endpoint"
+    .line 45
+    :cond_3a
+    invoke-direct {p0, p1, p2}, Lcom/fcm2up/Fcm2UpReceiver;->handleNewEndpoint(Landroid/content/Context;Landroid/content/Intent;)V
 
-    invoke-virtual {p2, v0}, Landroid/content/Intent;->getStringExtra(Ljava/lang/String;)Ljava/lang/String;
+    goto :goto_64
 
-    move-result-object p2
-
-    if-eqz p2, :cond_4d
-
-    invoke-static {p1, p2}, Lcom/fcm2up/Fcm2UpShim;->onNewEndpoint(Landroid/content/Context;Ljava/lang/String;)V
-
-    goto :goto_a0
-
-    :cond_4d
-    const-string p1, "NEW_ENDPOINT intent without endpoint"
-
-    invoke-static {v2, p1}, Landroid/util/Log;->w(Ljava/lang/String;Ljava/lang/String;)I
-
-    goto :goto_a0
-
-    .line 2
-    :cond_53
+    .line 43
+    :sswitch_3e
     const-string v1, "org.unifiedpush.android.connector.REGISTRATION_FAILED"
 
     invoke-virtual {v0, v1}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
 
-    move-result v0
+    move-result v1
 
-    if-nez v0, :cond_5c
+    if-nez v1, :cond_47
 
-    goto :goto_a0
+    goto :goto_30
 
-    .line 3
-    :cond_5c
-    invoke-virtual {p2, v4}, Landroid/content/Intent;->getStringExtra(Ljava/lang/String;)Ljava/lang/String;
+    .line 46
+    :cond_47
+    invoke-direct {p0, p1, p2}, Lcom/fcm2up/Fcm2UpReceiver;->handleRegistrationFailed(Landroid/content/Context;Landroid/content/Intent;)V
 
-    move-result-object p2
+    goto :goto_64
 
-    invoke-static {p1, p2}, Lcom/fcm2up/Fcm2UpShim;->onRegistrationFailed(Landroid/content/Context;Ljava/lang/String;)V
+    .line 43
+    :sswitch_4b
+    const-string v1, "org.unifiedpush.android.connector.UNREGISTERED"
 
-    goto :goto_a0
+    invoke-virtual {v0, v1}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
 
-    .line 4
-    :cond_64
-    const-string p2, "org.unifiedpush.android.connector.UNREGISTERED"
+    move-result v1
 
-    invoke-virtual {v0, p2}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
+    if-nez v1, :cond_54
 
-    move-result p2
+    goto :goto_30
 
-    if-nez p2, :cond_6d
+    .line 47
+    :cond_54
+    invoke-direct {p0, p1}, Lcom/fcm2up/Fcm2UpReceiver;->handleUnregistered(Landroid/content/Context;)V
 
-    goto :goto_a0
+    goto :goto_64
 
-    .line 5
-    :cond_6d
-    invoke-static {p1}, Lcom/fcm2up/Fcm2UpShim;->onUnregistered(Landroid/content/Context;)V
-
-    goto :goto_a0
-
-    .line 6
-    :cond_71
+    .line 43
+    :sswitch_58
     const-string v1, "org.unifiedpush.android.connector.MESSAGE"
 
     invoke-virtual {v0, v1}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
 
-    move-result v0
+    move-result v1
 
-    if-nez v0, :cond_7a
+    if-nez v1, :cond_61
 
-    goto :goto_a0
+    goto :goto_30
 
-    .line 7
-    :cond_7a
-    const-string v0, "bytesMessage"
+    .line 44
+    :cond_61
+    invoke-direct {p0, p1, p2}, Lcom/fcm2up/Fcm2UpReceiver;->handleMessage(Landroid/content/Context;Landroid/content/Intent;)V
 
-    invoke-virtual {p2, v0}, Landroid/content/Intent;->getByteArrayExtra(Ljava/lang/String;)[B
-
-    move-result-object v0
-
-    if-eqz v0, :cond_86
-
-    invoke-static {p1, v0}, Lcom/fcm2up/Fcm2UpShim;->onMessage(Landroid/content/Context;[B)V
-
-    goto :goto_a0
-
-    :cond_86
-    invoke-virtual {p2, v4}, Landroid/content/Intent;->getStringExtra(Ljava/lang/String;)Ljava/lang/String;
-
-    move-result-object p2
-
-    if-eqz p2, :cond_9b
-
-    sget-object v0, Lkotlin/text/Charsets;->UTF_8:Ljava/nio/charset/Charset;
-
-    invoke-virtual {p2, v0}, Ljava/lang/String;->getBytes(Ljava/nio/charset/Charset;)[B
-
-    move-result-object p2
-
-    const-string v0, "getBytes(...)"
-
-    invoke-static {p2, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullExpressionValue(Ljava/lang/Object;Ljava/lang/String;)V
-
-    invoke-static {p1, p2}, Lcom/fcm2up/Fcm2UpShim;->onMessage(Landroid/content/Context;[B)V
-
-    goto :goto_a0
-
-    :cond_9b
-    const-string p1, "MESSAGE intent without message data"
-
-    invoke-static {v2, p1}, Landroid/util/Log;->w(Ljava/lang/String;Ljava/lang/String;)I
-
-    :goto_a0
+    .line 49
+    :goto_64
     return-void
+
+    nop
+
+    :sswitch_data_66
+    .sparse-switch
+        -0x52c601c5 -> :sswitch_58
+        -0x1eb5b3f9 -> :sswitch_4b
+        -0x18334929 -> :sswitch_3e
+        0x62b723a0 -> :sswitch_31
+    .end sparse-switch
 .end method
