@@ -125,7 +125,8 @@ impl GcmSession {
         cert_sha1: Option<&str>,
     ) -> Result<GcmToken, Error> {
         let android_id = self.android_id.to_string();
-        let auth_header = format!("AidLogin {}:{}", &android_id, &self.security_token);
+        // GMS uses: AidLogin <security_token>:<android_id> (see bvaz.java:312)
+        let auth_header = format!("AidLogin {}:{}", &self.security_token, &android_id);
 
         // Build registration parameters matching what actual GMS sends
         // See bvaz.java:265-284 in GMS source
@@ -133,6 +134,7 @@ impl GcmSession {
         params.insert("app", package_name);
         params.insert("device", &android_id);
         params.insert("sender", sender_id);
+        params.insert("X-subtype", sender_id); // Required per ccdl.java:134
 
         // GCM version (from GMS source)
         params.insert("gcm_ver", "254730035");
