@@ -55,10 +55,13 @@ impl GcmSession {
             locale: Some("en_US".into()),
             time_zone: Some("America/Los_Angeles".into()),
             logging_id: Some(rand::random::<i64>().abs()),
-            // OTA cert from microG - base64 SHA1 of system OTA cert
+            // microG CheckinClient.java - required fields
+            digest: Some("".into()),
             ota_cert: vec!["71Q6Rn2DDZl1zPDVaaeEHItd".into()],
-            // Account cookie - empty on first checkin per microG
             account_cookie: vec!["".into()],
+            serial_number: Some("RF8M33YQXMR".into()),
+            mac_addr: vec!["aabbccddeeff".into()],
+            mac_addr_type: vec!["wifi".into()],
             checkin: contract::AndroidCheckinProto {
                 r#type: Some(1), // DEVICE_ANDROID_OS
                 build: Some(contract::AndroidBuildProto {
