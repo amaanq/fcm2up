@@ -125,8 +125,8 @@ impl GcmSession {
         cert_sha1: Option<&str>,
     ) -> Result<GcmToken, Error> {
         let android_id = self.android_id.to_string();
-        // GMS uses: AidLogin <security_token>:<android_id> (see bvaz.java:312)
-        let auth_header = format!("AidLogin {}:{}", &self.security_token, &android_id);
+        // GMS uses: AidLogin <android_id>:<security_token>
+        let auth_header = format!("AidLogin {}:{}", &android_id, &self.security_token);
 
         // Build registration parameters matching what actual GMS sends
         // See bvaz.java:265-284 in GMS source
@@ -157,6 +157,10 @@ impl GcmSession {
         }
 
         const API_NAME: &str = "GCM registration";
+
+        tracing::info!("GCM register params: {:?}", params);
+        tracing::info!("GCM auth header: {}", auth_header);
+
         let result = http
             .post(REGISTER_URL)
             .form(&params)
@@ -170,7 +174,7 @@ impl GcmSession {
             .await
             .map_err(|e| Error::Response(API_NAME, e))?;
 
-        tracing::debug!("GCM register response: {}", response_text);
+        tracing::info!("GCM register response: {}", response_text);
 
         const ERR_EOF: Error = Error::DependencyFailure(API_NAME, "malformed response");
 
