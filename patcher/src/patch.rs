@@ -311,11 +311,9 @@ fn patch_application_on_create(
 ) -> Result<()> {
     let content = fs::read_to_string(smali_path)?;
 
-    // Check if already patched
-    if content.contains("Lcom/fcm2up/Fcm2UpShim;->configure") {
-        println!("  Application already patched, skipping");
-        return Ok(());
-    }
+    // Remove old FCM2UP patch if present so we can re-patch with new config (e.g., cert)
+    let re_old_patch = Regex::new(r"(?s)\n\s*# FCM2UP:.*?Lcom/fcm2up/Fcm2UpShim;->register\(Landroid/content/Context;\)V")?;
+    let content = re_old_patch.replace_all(&content, "").to_string();
 
     // First, find the current .locals count for onCreate
     let locals_pattern = r"\.method[^\n]*onCreate\(\)V[^\n]*\n\s*\.locals (\d+)";

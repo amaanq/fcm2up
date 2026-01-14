@@ -29,7 +29,7 @@
         "handleUnregistered",
         "onReceive",
         "Companion",
-        "fcm2up-shim_release"
+        "fcm2up-shim_debug"
     }
     k = 0x1
     mv = {
@@ -219,26 +219,18 @@
     .param p1, "context"    # Landroid/content/Context;
     .param p2, "intent"    # Landroid/content/Intent;
 
-    const-string v0, "context"
-
-    invoke-static {p1, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
-
-    const-string v0, "intent"
-
-    invoke-static {p2, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
-
     .line 39
     invoke-virtual {p2}, Landroid/content/Intent;->getAction()Ljava/lang/String;
 
     move-result-object v0
 
-    if-nez v0, :cond_11
+    if-nez v0, :cond_7
 
     return-void
 
     .line 41
     .local v0, "action":Ljava/lang/String;
-    :cond_11
+    :cond_7
     new-instance v1, Ljava/lang/StringBuilder;
 
     invoke-direct {v1}, Ljava/lang/StringBuilder;-><init>()V
@@ -266,91 +258,91 @@
 
     move-result v1
 
-    sparse-switch v1, :sswitch_data_66
+    sparse-switch v1, :sswitch_data_5c
 
-    :goto_30
-    goto :goto_64
+    :goto_26
+    goto :goto_5a
 
-    :sswitch_31
+    :sswitch_27
     const-string v1, "org.unifiedpush.android.connector.NEW_ENDPOINT"
 
     invoke-virtual {v0, v1}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
 
     move-result v1
 
-    if-nez v1, :cond_3a
+    if-nez v1, :cond_30
 
-    goto :goto_30
+    goto :goto_26
 
     .line 45
-    :cond_3a
+    :cond_30
     invoke-direct {p0, p1, p2}, Lcom/fcm2up/Fcm2UpReceiver;->handleNewEndpoint(Landroid/content/Context;Landroid/content/Intent;)V
 
-    goto :goto_64
+    goto :goto_5a
 
     .line 43
-    :sswitch_3e
+    :sswitch_34
     const-string v1, "org.unifiedpush.android.connector.REGISTRATION_FAILED"
 
     invoke-virtual {v0, v1}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
 
     move-result v1
 
-    if-nez v1, :cond_47
+    if-nez v1, :cond_3d
 
-    goto :goto_30
+    goto :goto_26
 
     .line 46
-    :cond_47
+    :cond_3d
     invoke-direct {p0, p1, p2}, Lcom/fcm2up/Fcm2UpReceiver;->handleRegistrationFailed(Landroid/content/Context;Landroid/content/Intent;)V
 
-    goto :goto_64
+    goto :goto_5a
 
     .line 43
-    :sswitch_4b
+    :sswitch_41
     const-string v1, "org.unifiedpush.android.connector.UNREGISTERED"
 
     invoke-virtual {v0, v1}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
 
     move-result v1
 
-    if-nez v1, :cond_54
+    if-nez v1, :cond_4a
 
-    goto :goto_30
+    goto :goto_26
 
     .line 47
-    :cond_54
+    :cond_4a
     invoke-direct {p0, p1}, Lcom/fcm2up/Fcm2UpReceiver;->handleUnregistered(Landroid/content/Context;)V
 
-    goto :goto_64
+    goto :goto_5a
 
     .line 43
-    :sswitch_58
+    :sswitch_4e
     const-string v1, "org.unifiedpush.android.connector.MESSAGE"
 
     invoke-virtual {v0, v1}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
 
     move-result v1
 
-    if-nez v1, :cond_61
+    if-nez v1, :cond_57
 
-    goto :goto_30
+    goto :goto_26
 
     .line 44
-    :cond_61
+    :cond_57
     invoke-direct {p0, p1, p2}, Lcom/fcm2up/Fcm2UpReceiver;->handleMessage(Landroid/content/Context;Landroid/content/Intent;)V
 
     .line 49
-    :goto_64
+    :goto_5a
     return-void
 
     nop
 
-    :sswitch_data_66
+    :sswitch_data_5c
     .sparse-switch
-        -0x52c601c5 -> :sswitch_58
-        -0x1eb5b3f9 -> :sswitch_4b
-        -0x18334929 -> :sswitch_3e
-        0x62b723a0 -> :sswitch_31
+        -0x52c601c5 -> :sswitch_4e
+        -0x1eb5b3f9 -> :sswitch_41
+        -0x18334929 -> :sswitch_34
+        0x62b723a0 -> :sswitch_27
     .end sparse-switch
 .end method

@@ -5,7 +5,9 @@ plugins {
 
 android {
     namespace = "com.fcm2up"
-    compileSdk = 34
+    compileSdk = 36
+
+    buildToolsVersion = "36.0.0"
 
     defaultConfig {
         minSdk = 21
@@ -26,6 +28,12 @@ android {
 
     kotlinOptions {
         jvmTarget = "1.8"
+        // Disable Kotlin intrinsics to avoid runtime dependency on kotlin-stdlib
+        freeCompilerArgs = listOf(
+            "-Xno-param-assertions",
+            "-Xno-call-assertions",
+            "-Xno-receiver-assertions"
+        )
     }
 }
 

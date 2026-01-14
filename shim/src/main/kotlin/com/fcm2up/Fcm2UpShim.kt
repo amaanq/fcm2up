@@ -55,9 +55,9 @@ object Fcm2UpShim {
 
     // Helper to avoid kotlin stdlib StringsKt
     private fun notEmpty(s: String?): Boolean = s != null && s.length > 0
-    private fun preview(s: String?, len: Int = 20): String {
+    private fun preview(s: String?): String {
         if (s == null) return "null"
-        return if (s.length > len) s.substring(0, len) + "..." else s
+        return if (s.length > 20) s.substring(0, 20) + "..." else s
     }
 
     /**

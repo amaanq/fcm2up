@@ -30,7 +30,7 @@
         "EXTRA_ENDPOINT",
         "EXTRA_MESSAGE",
         "TAG",
-        "fcm2up-shim_release"
+        "fcm2up-shim_debug"
     }
     k = 0x1
     mv = {
