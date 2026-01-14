@@ -28,10 +28,20 @@ pub fn extract_firebase_credentials(apk_path: &Path) -> Result<FirebaseCredentia
     // Decode APK
     crate::apk::decode_apk(apk_path, &temp_dir)?;
 
+    let creds = extract_firebase_credentials_from_decoded(&temp_dir)?;
+
+    // Cleanup
+    let _ = std::fs::remove_dir_all(&temp_dir);
+
+    Ok(creds)
+}
+
+/// Extract Firebase credentials from an already-decoded APK directory
+pub fn extract_firebase_credentials_from_decoded(decoded_dir: &Path) -> Result<FirebaseCredentials> {
     let mut creds = FirebaseCredentials::default();
 
     // Try to find google-services.json in raw resources
-    let raw_dir = temp_dir.join("res/raw");
+    let raw_dir = decoded_dir.join("res/raw");
     if raw_dir.exists() {
         for entry in std::fs::read_dir(&raw_dir)? {
             let entry = entry?;
@@ -50,14 +60,14 @@ pub fn extract_firebase_credentials(apk_path: &Path) -> Result<FirebaseCredentia
     }
 
     // Extract from strings.xml
-    let strings_path = temp_dir.join("res/values/strings.xml");
+    let strings_path = decoded_dir.join("res/values/strings.xml");
     if strings_path.exists() {
         let content = std::fs::read_to_string(&strings_path)?;
         extract_from_strings_xml(&content, &mut creds);
     }
 
     // Search all values files for Firebase strings
-    let values_dir = temp_dir.join("res/values");
+    let values_dir = decoded_dir.join("res/values");
     if values_dir.exists() {
         for entry in WalkDir::new(&values_dir)
             .into_iter()
@@ -70,14 +80,11 @@ pub fn extract_firebase_credentials(apk_path: &Path) -> Result<FirebaseCredentia
     }
 
     // Check AndroidManifest.xml for metadata
-    let manifest_path = temp_dir.join("AndroidManifest.xml");
+    let manifest_path = decoded_dir.join("AndroidManifest.xml");
     if manifest_path.exists() {
         let content = std::fs::read_to_string(&manifest_path)?;
         extract_from_manifest(&content, &mut creds);
     }
-
-    // Cleanup
-    let _ = std::fs::remove_dir_all(&temp_dir);
 
     Ok(creds)
 }

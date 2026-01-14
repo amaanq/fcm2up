@@ -14,6 +14,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.UUID
 import java.util.concurrent.Executors
+import org.json.JSONObject
 
 /**
  * FCM-to-UnifiedPush Shim
@@ -28,8 +29,12 @@ object Fcm2UpShim {
     private const val KEY_ENDPOINT = "up_endpoint"
     private const val KEY_TOKEN = "up_token"
     private const val KEY_FCM_TOKEN = "fcm_token"
+    private const val KEY_BRIDGE_FCM_TOKEN = "bridge_fcm_token"
     private const val KEY_BRIDGE_URL = "bridge_url"
     private const val KEY_DISTRIBUTOR = "distributor"
+    private const val KEY_FIREBASE_APP_ID = "firebase_app_id"
+    private const val KEY_FIREBASE_PROJECT_ID = "firebase_project_id"
+    private const val KEY_FIREBASE_API_KEY = "firebase_api_key"
     private const val KEY_FCM_HANDLER_CLASS = "fcm_handler_class"
     private const val KEY_FCM_HANDLER_METHOD = "fcm_handler_method"
 
@@ -45,44 +50,66 @@ object Fcm2UpShim {
     // ==================== Configuration ====================
 
     /**
-     * Configure the shim. Called by patcher-generated init code.
+     * Configure the shim with Firebase credentials.
+     * Called by patcher-generated init code.
      */
     @JvmStatic
     fun configure(
         context: Context,
         bridgeUrl: String,
         distributor: String = DEFAULT_DISTRIBUTOR,
-        fcmHandlerClass: String? = null,
-        fcmHandlerMethod: String? = null
+        firebaseAppId: String? = null,
+        firebaseProjectId: String? = null,
+        firebaseApiKey: String? = null
     ) {
         val prefs = getPrefs(context)
         prefs.edit().apply {
             putString(KEY_BRIDGE_URL, bridgeUrl)
-            putString(KEY_DISTRIBUTOR, distributor)
-            fcmHandlerClass?.let { putString(KEY_FCM_HANDLER_CLASS, it) }
-            fcmHandlerMethod?.let { putString(KEY_FCM_HANDLER_METHOD, it) }
+            putString(KEY_DISTRIBUTOR, distributor.ifEmpty { DEFAULT_DISTRIBUTOR })
+            // Store Firebase credentials for bridge registration
+            if (!firebaseAppId.isNullOrEmpty()) putString(KEY_FIREBASE_APP_ID, firebaseAppId)
+            if (!firebaseProjectId.isNullOrEmpty()) putString(KEY_FIREBASE_PROJECT_ID, firebaseProjectId)
+            if (!firebaseApiKey.isNullOrEmpty()) putString(KEY_FIREBASE_API_KEY, firebaseApiKey)
             apply()
         }
-        Log.i(TAG, "Configured: bridge=$bridgeUrl, distributor=$distributor")
+        Log.i(TAG, "Configured: bridge=$bridgeUrl, distributor=$distributor, firebase_app_id=${firebaseAppId?.take(20)}...")
     }
 
-    // ==================== FCM Interception ====================
+    // ==================== FCM Token Interception ====================
 
     /**
-     * Called when app receives new FCM token.
+     * Called when app receives new FCM token from Google.
      * Hook this into FirebaseMessagingService.onNewToken()
+     *
+     * IMPORTANT: We store Google's token but don't use it.
+     * Instead, we return the bridge's FCM token to the app.
      */
     @JvmStatic
     fun onToken(context: Context, fcmToken: String) {
-        Log.d(TAG, "FCM token received: ${fcmToken.length} chars")
+        Log.d(TAG, "FCM token received from Google: ${fcmToken.take(20)}...")
 
-        // Store FCM token
+        // Store Google's FCM token (we need it for... actually we might not need it)
+        // The bridge creates its own FCM registration
         getPrefs(context).edit().putString(KEY_FCM_TOKEN, fcmToken).apply()
 
-        // If we have an endpoint, send FCM token to bridge
+        // If we have an endpoint, register with bridge
         if (getEndpoint(context) != null) {
             sendRegistrationToBridge(context)
         }
+    }
+
+    /**
+     * Get the FCM token that the app should use.
+     * This returns the BRIDGE's FCM token, not Google's token.
+     * The app's backend should send FCM messages to this token,
+     * which the bridge will receive and forward via UnifiedPush.
+     */
+    @JvmStatic
+    fun getEffectiveFcmToken(context: Context): String? {
+        val prefs = getPrefs(context)
+        // Prefer bridge's FCM token, fall back to Google's
+        return prefs.getString(KEY_BRIDGE_FCM_TOKEN, null)
+            ?: prefs.getString(KEY_FCM_TOKEN, null)
     }
 
     /**
@@ -168,7 +195,7 @@ object Fcm2UpShim {
         // Store endpoint
         getPrefs(context).edit().putString(KEY_ENDPOINT, endpoint).apply()
 
-        // Send FCM token + endpoint to bridge
+        // Send Firebase credentials + endpoint to bridge
         sendRegistrationToBridge(context)
     }
 
@@ -201,6 +228,7 @@ object Fcm2UpShim {
         getPrefs(context).edit()
             .remove(KEY_ENDPOINT)
             .remove(KEY_TOKEN)
+            .remove(KEY_BRIDGE_FCM_TOKEN)
             .apply()
     }
 
@@ -209,12 +237,18 @@ object Fcm2UpShim {
     private fun sendRegistrationToBridge(context: Context) {
         val prefs = getPrefs(context)
         val endpoint = prefs.getString(KEY_ENDPOINT, null)
-        val fcmToken = prefs.getString(KEY_FCM_TOKEN, null)
         val bridgeUrl = prefs.getString(KEY_BRIDGE_URL, null)
+        val firebaseAppId = prefs.getString(KEY_FIREBASE_APP_ID, null)
+        val firebaseProjectId = prefs.getString(KEY_FIREBASE_PROJECT_ID, null)
+        val firebaseApiKey = prefs.getString(KEY_FIREBASE_API_KEY, null)
 
-        if (endpoint == null || fcmToken == null || bridgeUrl == null) {
-            Log.d(TAG, "Missing data for bridge registration: endpoint=$endpoint, fcmToken=${fcmToken != null}, bridgeUrl=$bridgeUrl")
+        if (endpoint == null || bridgeUrl == null) {
+            Log.d(TAG, "Missing data for bridge registration: endpoint=$endpoint, bridgeUrl=$bridgeUrl")
             return
+        }
+
+        if (firebaseAppId == null || firebaseProjectId == null || firebaseApiKey == null) {
+            Log.w(TAG, "Missing Firebase credentials - bridge won't be able to receive FCM")
         }
 
         executor.execute {
@@ -229,16 +263,36 @@ object Fcm2UpShim {
                     readTimeout = 10000
                 }
 
-                val json = """{"endpoint":"$endpoint","fcm_token":"$fcmToken","app_id":"${context.packageName}"}"""
+                // Build JSON with Firebase credentials
+                val jsonObj = JSONObject().apply {
+                    put("endpoint", endpoint)
+                    put("app_id", context.packageName)
+                    firebaseAppId?.let { put("firebase_app_id", it) }
+                    firebaseProjectId?.let { put("firebase_project_id", it) }
+                    firebaseApiKey?.let { put("firebase_api_key", it) }
+                }
 
                 OutputStreamWriter(conn.outputStream).use { writer ->
-                    writer.write(json)
+                    writer.write(jsonObj.toString())
                     writer.flush()
                 }
 
                 val responseCode = conn.responseCode
                 if (responseCode == 200) {
-                    Log.i(TAG, "Registered with bridge successfully")
+                    // Parse response to get bridge's FCM token
+                    val responseBody = BufferedReader(InputStreamReader(conn.inputStream)).use { it.readText() }
+                    try {
+                        val response = JSONObject(responseBody)
+                        val bridgeFcmToken = response.optString("fcm_token", null)
+                        if (!bridgeFcmToken.isNullOrEmpty()) {
+                            // Store bridge's FCM token - this is what the app should use!
+                            prefs.edit().putString(KEY_BRIDGE_FCM_TOKEN, bridgeFcmToken).apply()
+                            Log.i(TAG, "Got bridge FCM token: ${bridgeFcmToken.take(20)}...")
+                        }
+                        Log.i(TAG, "Registered with bridge: ${response.optString("message", "success")}")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Could not parse bridge response: $responseBody")
+                    }
                 } else {
                     val error = BufferedReader(InputStreamReader(conn.errorStream)).use { it.readText() }
                     Log.e(TAG, "Bridge registration failed: $responseCode - $error")
@@ -250,6 +304,17 @@ object Fcm2UpShim {
     }
 
     // ==================== FCM Handler Forwarding ====================
+
+    /**
+     * Set the app's FCM handler for message forwarding.
+     */
+    @JvmStatic
+    fun setFcmHandler(context: Context, handlerClass: String, handlerMethod: String) {
+        getPrefs(context).edit()
+            .putString(KEY_FCM_HANDLER_CLASS, handlerClass)
+            .putString(KEY_FCM_HANDLER_METHOD, handlerMethod)
+            .apply()
+    }
 
     /**
      * Forward message to app's original FCM handler via reflection.
