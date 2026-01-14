@@ -83,6 +83,9 @@ impl Registration {
             gcm_session.android_id
         );
 
+        // Small delay between checkin and registration (microG has implicit delay)
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
         // Step 2: Register with GCM to get a token
         tracing::debug!("Registering with GCM...");
         let gcm_token = gcm_session

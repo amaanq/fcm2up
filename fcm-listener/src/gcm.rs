@@ -55,8 +55,8 @@ impl GcmSession {
             locale: Some("en_US".into()),
             time_zone: Some("America/Los_Angeles".into()),
             logging_id: Some(rand::random::<i64>().abs()),
-            // microG CheckinClient.java - required fields
-            digest: Some("".into()),
+            // microG uses this specific initial digest value
+            digest: Some("1-929a0dca0eee55513280171a8585da7dcd3700f8".into()),
             ota_cert: vec!["71Q6Rn2DDZl1zPDVaaeEHItd".into()],
             account_cookie: vec!["".into()],
             serial_number: Some("RF8M33YQXMR".into()),
@@ -156,22 +156,25 @@ impl GcmSession {
         cert_sha1: Option<&str>,
     ) -> Result<GcmToken, Error> {
         let android_id = self.android_id.to_string();
-        // microG uses: AidLogin <android_id>:<security_token>
-        let auth_header = format!("AidLogin {}:{}", &android_id, &self.security_token);
+        // GMS bvaz.java:312 - AidLogin <security_token>:<android_id>
+        let auth_header = format!("AidLogin {}:{}", &self.security_token, &android_id);
         // User-Agent matching microG: Android-GCM/1.5 (device buildId)
         let user_agent = "Android-GCM/1.5 (redfin AP2A.240805.005)";
 
         // Build registration parameters matching microG's RegisterRequest.java EXACTLY
-        // microG only sends: app, cert, app_ver, info, sender, device, target_ver
-        let mut params = std::collections::HashMap::with_capacity(8);
+        // Using REAL app values from GitHub APK (extracted via apktool)
+        let mut params = std::collections::HashMap::with_capacity(10);
         params.insert("app", package_name);
         params.insert("device", &android_id);
         params.insert("sender", sender_id);
         params.insert("info", "");
-        params.insert("app_ver", "1");
-        params.insert("target_ver", "34");
+        // GitHub's ACTUAL values - not fake ones!
+        params.insert("app_ver", "896");           // versionCode from apktool
+        params.insert("target_ver", "36");         // targetSdkVersion from apktool
+        params.insert("gcm_ver", "254730035");     // GMS version
+        params.insert("plat", "0");                // Platform (0 = Android)
 
-        // Add cert if provided (must be lowercase hex!)
+        // Cert is required - use GitHub's original signing cert
         let cert_lower;
         if let Some(cert) = cert_sha1 {
             cert_lower = cert.to_lowercase();
@@ -189,6 +192,8 @@ impl GcmSession {
             .header(reqwest::header::AUTHORIZATION, auth_header)
             .header(reqwest::header::USER_AGENT, user_agent)
             .header("app", package_name)
+            .header("gcm_ver", "254730035")  // GMS sends this as header
+            .header("app_ver", "896")         // GMS sends this as header
             .send()
             .await
             .map_err(|e| Error::Request(API_NAME, e))?;

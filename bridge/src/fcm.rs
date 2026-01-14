@@ -59,7 +59,10 @@ impl FcmManager {
 
         info!(
             "Registering with FCM for app: {} (sender_id: {}, package: {}, cert: {})",
-            app_id, sender_id, app_id, cert_sha1.as_deref().unwrap_or("none")
+            app_id,
+            sender_id,
+            app_id,
+            cert_sha1.as_deref().unwrap_or("none")
         );
 
         // Build FCM credentials
@@ -155,7 +158,11 @@ async fn run_listener(
         }
 
         // Connect to mtalk.google.com
-        let connection = match registration.gcm_session.connect(persistent_ids.clone()).await {
+        let connection = match registration
+            .gcm_session
+            .connect(persistent_ids.clone())
+            .await
+        {
             Ok(conn) => conn,
             Err(e) => {
                 error!("FCM connection failed for {}: {}", app_id, e);
