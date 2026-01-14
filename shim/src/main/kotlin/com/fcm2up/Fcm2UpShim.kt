@@ -38,6 +38,7 @@ object Fcm2UpShim {
     private const val KEY_FCM_HANDLER_CLASS = "fcm_handler_class"
     private const val KEY_FCM_HANDLER_METHOD = "fcm_handler_method"
     private const val KEY_FCM_SERVICE_CLASS = "fcm_service_class"
+    private const val KEY_CERT_SHA1 = "cert_sha1"
 
     // Actions we SEND to the distributor (ntfy)
     private const val ACTION_REGISTER = "org.unifiedpush.android.distributor.REGISTER"
@@ -60,7 +61,7 @@ object Fcm2UpShim {
     }
 
     /**
-     * Configure the shim with Firebase credentials and FCM service class.
+     * Configure the shim with Firebase credentials, FCM service class, and original cert SHA1.
      */
     @JvmStatic
     fun configure(
@@ -70,7 +71,8 @@ object Fcm2UpShim {
         firebaseAppId: String?,
         firebaseProjectId: String?,
         firebaseApiKey: String?,
-        fcmServiceClass: String?
+        fcmServiceClass: String?,
+        certSha1: String?
     ) {
         val prefs = getPrefs(context)
         val editor = prefs.edit()
@@ -80,9 +82,10 @@ object Fcm2UpShim {
         if (notEmpty(firebaseProjectId)) editor.putString(KEY_FIREBASE_PROJECT_ID, firebaseProjectId)
         if (notEmpty(firebaseApiKey)) editor.putString(KEY_FIREBASE_API_KEY, firebaseApiKey)
         if (notEmpty(fcmServiceClass)) editor.putString(KEY_FCM_SERVICE_CLASS, fcmServiceClass)
+        if (notEmpty(certSha1)) editor.putString(KEY_CERT_SHA1, certSha1)
         editor.apply()
 
-        Log.i(TAG, "Configured: bridge=$bridgeUrl, distributor=$distributor, firebase_app_id=${preview(firebaseAppId)}, fcm_service=${preview(fcmServiceClass)}")
+        Log.i(TAG, "Configured: bridge=$bridgeUrl, distributor=$distributor, firebase_app_id=${preview(firebaseAppId)}, fcm_service=${preview(fcmServiceClass)}, cert=${preview(certSha1)}")
     }
 
     /**
@@ -223,6 +226,7 @@ object Fcm2UpShim {
         val firebaseAppId = prefs.getString(KEY_FIREBASE_APP_ID, null)
         val firebaseProjectId = prefs.getString(KEY_FIREBASE_PROJECT_ID, null)
         val firebaseApiKey = prefs.getString(KEY_FIREBASE_API_KEY, null)
+        val certSha1 = prefs.getString(KEY_CERT_SHA1, null)
 
         if (endpoint == null || bridgeUrl == null) {
             Log.d(TAG, "Missing data for bridge registration")
@@ -251,6 +255,7 @@ object Fcm2UpShim {
                 if (firebaseAppId != null) jsonObj.put("firebase_app_id", firebaseAppId)
                 if (firebaseProjectId != null) jsonObj.put("firebase_project_id", firebaseProjectId)
                 if (firebaseApiKey != null) jsonObj.put("firebase_api_key", firebaseApiKey)
+                if (certSha1 != null) jsonObj.put("cert_sha1", certSha1)
 
                 val writer = OutputStreamWriter(conn.outputStream)
                 writer.write(jsonObj.toString())

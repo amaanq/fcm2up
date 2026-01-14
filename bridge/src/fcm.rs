@@ -44,6 +44,7 @@ impl FcmManager {
         firebase_app_id: String,
         firebase_project_id: String,
         firebase_api_key: String,
+        cert_sha1: Option<String>,
         endpoint: String,
         db: Arc<Database>,
     ) -> Result<String> {
@@ -57,8 +58,8 @@ impl FcmManager {
         let sender_id = extract_sender_id(&firebase_app_id)?;
 
         info!(
-            "Registering with FCM for app: {} (sender_id: {}, package: {})",
-            app_id, sender_id, app_id
+            "Registering with FCM for app: {} (sender_id: {}, package: {}, cert: {})",
+            app_id, sender_id, app_id, cert_sha1.as_deref().unwrap_or("none")
         );
 
         // Build FCM credentials
@@ -68,7 +69,7 @@ impl FcmManager {
             app_id: firebase_app_id,
             project_id: firebase_project_id,
             package_name: app_id.clone(),
-            cert_sha1: None, // TODO: Extract from APK if needed
+            cert_sha1,
         };
 
         // Register with FCM

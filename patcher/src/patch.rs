@@ -35,8 +35,23 @@ pub fn patch_apk(config: PatchConfig) -> Result<()> {
 
     let decoded_dir = temp_dir.join("decoded");
 
+    // Step 0: Extract original cert SHA1 BEFORE modifying the APK
+    // This is critical because re-signing changes the cert, but Firebase validates against the original
+    println!("\n[0/8] Extracting original signing certificate...");
+    let cert_sha1 = match extract::extract_cert_sha1(&config.input) {
+        Ok(sha1) => {
+            println!("  Cert SHA1: {}", sha1);
+            Some(sha1)
+        }
+        Err(e) => {
+            println!("  Warning: Could not extract cert SHA1: {}", e);
+            println!("  FCM registration may fail without valid certificate");
+            None
+        }
+    };
+
     // Step 1: Decode APK
-    println!("\n[1/7] Decoding APK...");
+    println!("\n[1/8] Decoding APK...");
     apk::decode_apk(&config.input, &decoded_dir)?;
 
     // Get package name
@@ -44,7 +59,7 @@ pub fn patch_apk(config: PatchConfig) -> Result<()> {
     println!("  Package: {}", package_name);
 
     // Step 2: Extract Firebase credentials
-    println!("\n[2/7] Extracting Firebase credentials...");
+    println!("\n[2/8] Extracting Firebase credentials...");
     let firebase_creds = extract::extract_firebase_credentials_from_decoded(&decoded_dir)?;
     if firebase_creds.app_id.is_some() {
         println!("  App ID: {}", firebase_creds.app_id.as_ref().unwrap());
@@ -56,7 +71,7 @@ pub fn patch_apk(config: PatchConfig) -> Result<()> {
     }
 
     // Step 3: Find Firebase messaging service
-    println!("\n[3/7] Analyzing FCM integration...");
+    println!("\n[3/8] Analyzing FCM integration...");
     let firebase_service = apk::find_firebase_service(&decoded_dir)?;
 
     if let Some(ref service_path) = firebase_service {
@@ -67,26 +82,33 @@ pub fn patch_apk(config: PatchConfig) -> Result<()> {
     }
 
     // Step 4: Inject shim DEX
-    println!("\n[4/7] Injecting shim...");
+    println!("\n[4/8] Injecting shim...");
     inject_shim_dex(&decoded_dir, config.shim_dex.as_deref())?;
 
     // Step 5: Patch smali hooks
-    println!("\n[5/7] Patching hooks...");
+    println!("\n[5/8] Patching hooks...");
     let fcm_service_class = if let Some(service_path) = firebase_service {
         patch_firebase_service(&service_path)?
     } else {
         None
     };
-    patch_application_class(&decoded_dir, &config.bridge_url, &config.distributor, &firebase_creds, fcm_service_class.as_deref())?;
+    patch_application_class(
+        &decoded_dir,
+        &config.bridge_url,
+        &config.distributor,
+        &firebase_creds,
+        fcm_service_class.as_deref(),
+        cert_sha1.as_deref(),
+    )?;
 
     // Step 6: Update manifest
-    println!("\n[6/7] Updating manifest...");
+    println!("\n[6/8] Updating manifest...");
     let manifest_path = decoded_dir.join("AndroidManifest.xml");
     manifest::remove_split_requirements(&manifest_path)?;
     manifest::add_unifiedpush_receiver(&manifest_path, &package_name)?;
 
     // Step 7: Build and sign
-    println!("\n[7/7] Building APK...");
+    println!("\n[7/8] Building APK...");
     apk::build_apk(&decoded_dir, &config.output)?;
     apk::zipalign_apk(&config.output)?;
     apk::sign_apk(
@@ -236,6 +258,7 @@ fn patch_application_class(
     distributor: &str,
     firebase_creds: &extract::FirebaseCredentials,
     fcm_service_class: Option<&str>,
+    cert_sha1: Option<&str>,
 ) -> Result<()> {
     let manifest_path = decoded_dir.join("AndroidManifest.xml");
 
@@ -249,14 +272,14 @@ fn patch_application_class(
         let smali_path = class_name_to_smali_path(decoded_dir, &class_name)?;
 
         if let Some(path) = smali_path {
-            patch_application_on_create(&path, bridge_url, distributor, firebase_creds, fcm_service_class)?;
+            patch_application_on_create(&path, bridge_url, distributor, firebase_creds, fcm_service_class, cert_sha1)?;
         } else {
             println!("  Warning: Could not find Application class smali file");
-            create_init_provider(decoded_dir, bridge_url, distributor, firebase_creds, fcm_service_class)?;
+            create_init_provider(decoded_dir, bridge_url, distributor, firebase_creds, fcm_service_class, cert_sha1)?;
         }
     } else {
         println!("  No custom Application class, using ContentProvider init");
-        create_init_provider(decoded_dir, bridge_url, distributor, firebase_creds, fcm_service_class)?;
+        create_init_provider(decoded_dir, bridge_url, distributor, firebase_creds, fcm_service_class, cert_sha1)?;
     }
 
     Ok(())
@@ -284,6 +307,7 @@ fn patch_application_on_create(
     distributor: &str,
     firebase_creds: &extract::FirebaseCredentials,
     fcm_service_class: Option<&str>,
+    cert_sha1: Option<&str>,
 ) -> Result<()> {
     let content = fs::read_to_string(smali_path)?;
 
@@ -302,23 +326,24 @@ fn patch_application_on_create(
         .and_then(|m| m.as_str().parse().ok())
         .unwrap_or(4);
 
-    // We need 8 registers for our code (context + 7 string args including FCM service class)
+    // We need 9 registers for our code (context + 8 string args including cert SHA1)
     // Use registers at the end of the range to avoid clobbering
     let base_reg = current_locals;
-    let new_locals = current_locals + 8;
+    let new_locals = current_locals + 9;
 
     // Get Firebase credential strings (or null placeholders)
     let fb_app_id = firebase_creds.app_id.as_deref().unwrap_or("");
     let fb_project_id = firebase_creds.project_id.as_deref().unwrap_or("");
     let fb_api_key = firebase_creds.api_key.as_deref().unwrap_or("");
     let fcm_svc_class = fcm_service_class.unwrap_or("");
+    let cert = cert_sha1.unwrap_or("");
 
     // Generate init code using high registers and invoke-static/range
     // Note: const/4 only works with v0-v15, use const/16 for high registers
-    // Configure signature: (Context, bridgeUrl, distributor, firebaseAppId, firebaseProjectId, firebaseApiKey, fcmServiceClass)
+    // Configure signature: (Context, bridgeUrl, distributor, firebaseAppId, firebaseProjectId, firebaseApiKey, fcmServiceClass, certSha1)
     let init_code = format!(
         r#"
-    # FCM2UP: Initialize shim with Firebase credentials and FCM service class
+    # FCM2UP: Initialize shim with Firebase credentials, FCM service class, and cert
     move-object/from16 v{base}, p0
     const-string v{url}, "{bridge_url}"
     const-string v{dist}, "{distributor}"
@@ -326,7 +351,8 @@ fn patch_application_on_create(
     const-string v{proj_id}, "{fb_project_id}"
     const-string v{api_key}, "{fb_api_key}"
     const-string v{fcm_svc}, "{fcm_svc_class}"
-    invoke-static/range {{v{base} .. v{fcm_svc}}}, Lcom/fcm2up/Fcm2UpShim;->configure(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+    const-string v{cert_reg}, "{cert}"
+    invoke-static/range {{v{base} .. v{cert_reg}}}, Lcom/fcm2up/Fcm2UpShim;->configure(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
 
     # FCM2UP: Register with UnifiedPush
     invoke-static/range {{v{base} .. v{base}}}, Lcom/fcm2up/Fcm2UpShim;->register(Landroid/content/Context;)V
@@ -338,12 +364,14 @@ fn patch_application_on_create(
         proj_id = base_reg + 4,
         api_key = base_reg + 5,
         fcm_svc = base_reg + 6,
+        cert_reg = base_reg + 7,
         bridge_url = bridge_url,
         distributor = distributor,
         fb_app_id = fb_app_id,
         fb_project_id = fb_project_id,
         fb_api_key = fb_api_key,
         fcm_svc_class = fcm_svc_class,
+        cert = cert,
     );
 
     // Find onCreate and inject after super.onCreate()
@@ -379,7 +407,7 @@ fn patch_application_on_create(
         .to_string();
 
     fs::write(smali_path, new_content)?;
-    println!("  Injected init code into Application.onCreate (using v{}-v{})", base_reg, base_reg + 5);
+    println!("  Injected init code into Application.onCreate (using v{}-v{})", base_reg, base_reg + 7);
 
     Ok(())
 }
@@ -391,11 +419,13 @@ fn create_init_provider(
     distributor: &str,
     firebase_creds: &extract::FirebaseCredentials,
     fcm_service_class: Option<&str>,
+    cert_sha1: Option<&str>,
 ) -> Result<()> {
     let fb_app_id = firebase_creds.app_id.as_deref().unwrap_or("");
     let fb_project_id = firebase_creds.project_id.as_deref().unwrap_or("");
     let fb_api_key = firebase_creds.api_key.as_deref().unwrap_or("");
     let fcm_svc_class = fcm_service_class.unwrap_or("");
+    let cert = cert_sha1.unwrap_or("");
 
     // Create a ContentProvider that initializes on app start
     let provider_smali = format!(
@@ -410,20 +440,21 @@ fn create_init_provider(
 .end method
 
 .method public onCreate()Z
-    .locals 8
+    .locals 9
 
     # Get context
     invoke-virtual {{p0}}, Landroid/content/ContentProvider;->getContext()Landroid/content/Context;
     move-result-object v0
 
-    # Configure shim with Firebase credentials and FCM service class
+    # Configure shim with Firebase credentials, FCM service class, and cert
     const-string v1, "{bridge_url}"
     const-string v2, "{distributor}"
     const-string v3, "{fb_app_id}"
     const-string v4, "{fb_project_id}"
     const-string v5, "{fb_api_key}"
     const-string v6, "{fcm_svc_class}"
-    invoke-static/range {{v0 .. v6}}, Lcom/fcm2up/Fcm2UpShim;->configure(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+    const-string v7, "{cert}"
+    invoke-static/range {{v0 .. v7}}, Lcom/fcm2up/Fcm2UpShim;->configure(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
 
     # Register with UnifiedPush
     invoke-static {{v0}}, Lcom/fcm2up/Fcm2UpShim;->register(Landroid/content/Context;)V

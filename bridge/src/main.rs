@@ -41,6 +41,9 @@ struct RegisterRequest {
     firebase_project_id: Option<String>,
     #[serde(default)]
     firebase_api_key: Option<String>,
+    /// Original APK signing certificate SHA1 (lowercase hex, no colons)
+    #[serde(default)]
+    cert_sha1: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -175,6 +178,7 @@ async fn register(
             firebase_app_id,
             firebase_project_id,
             firebase_api_key,
+            req.cert_sha1.clone(),
             req.endpoint.clone(),
             db,
         )
@@ -240,6 +244,7 @@ async fn restore_registrations(state: AppState) -> anyhow::Result<()> {
                 reg.firebase_app_id,
                 reg.firebase_project_id,
                 reg.firebase_api_key,
+                None, // cert_sha1 not stored in db yet
                 reg.endpoint,
                 db,
             )

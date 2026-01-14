@@ -188,3 +188,76 @@ pub fn extract_package_name(decoded_dir: &Path) -> Result<String> {
 
     Ok(caps.get(1).unwrap().as_str().to_string())
 }
+
+/// Extract the signing certificate SHA1 fingerprint from an APK
+/// Returns lowercase hex without colons, e.g., "38918a453d07199354f8b19af05ec6562ced5788"
+pub fn extract_cert_sha1(apk_path: &Path) -> Result<String> {
+    // Try apksigner first
+    let output = std::process::Command::new("apksigner")
+        .args(["verify", "--print-certs"])
+        .arg(apk_path)
+        .output()
+        .context("Failed to run apksigner")?;
+
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // Look for "Signer #1 certificate SHA-1 digest: <hex>"
+        let re = Regex::new(r"SHA-1 digest:\s*([0-9a-fA-F]+)")?;
+        if let Some(caps) = re.captures(&stdout) {
+            let sha1 = caps.get(1).unwrap().as_str().to_lowercase();
+            return Ok(sha1);
+        }
+    }
+
+    // Fallback: try keytool
+    // First, extract the cert from the APK
+    let temp_dir = std::env::temp_dir().join("fcm2up-cert");
+    let _ = std::fs::remove_dir_all(&temp_dir);
+    std::fs::create_dir_all(&temp_dir)?;
+
+    // Open APK as zip and find cert file
+    let file = std::fs::File::open(apk_path)?;
+    let mut archive = zip::ZipArchive::new(file)?;
+
+    let mut cert_file = None;
+    for i in 0..archive.len() {
+        let file = archive.by_index(i)?;
+        let name = file.name().to_string();
+        if name.starts_with("META-INF/") && (name.ends_with(".RSA") || name.ends_with(".DSA") || name.ends_with(".EC")) {
+            cert_file = Some(name);
+            break;
+        }
+    }
+
+    let cert_name = cert_file.context("No signing certificate found in APK")?;
+    let cert_path = temp_dir.join("cert.rsa");
+
+    {
+        let mut file = archive.by_name(&cert_name)?;
+        let mut cert_out = std::fs::File::create(&cert_path)?;
+        std::io::copy(&mut file, &mut cert_out)?;
+    }
+
+    // Use keytool to get fingerprint
+    let output = std::process::Command::new("keytool")
+        .args(["-printcert", "-file"])
+        .arg(&cert_path)
+        .output()
+        .context("Failed to run keytool")?;
+
+    let _ = std::fs::remove_dir_all(&temp_dir);
+
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // Look for "SHA1: XX:XX:XX..."
+        let re = Regex::new(r"SHA1:\s*([0-9A-Fa-f:]+)")?;
+        if let Some(caps) = re.captures(&stdout) {
+            let sha1 = caps.get(1).unwrap().as_str()
+                .replace(":", "")
+                .to_lowercase();
+            return Ok(sha1);
+        }
+    }
+
+    anyhow::bail!("Could not extract certificate SHA1 from APK")
+}
