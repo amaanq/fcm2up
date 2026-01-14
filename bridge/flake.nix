@@ -23,7 +23,9 @@
           fcm2up-bridge = pkgs.rustPlatform.buildRustPackage {
             pname = "fcm2up-bridge";
             version = "0.1.0";
-            src = ./.;
+            # Use parent directory to include fcm-listener
+            src = ./..;
+            sourceRoot = "source/bridge";
             cargoLock.lockFile = ./Cargo.lock;
 
             nativeBuildInputs = [

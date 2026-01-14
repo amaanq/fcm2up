@@ -94,9 +94,9 @@
 
 
 # static fields
-.field private static final ACTION_REGISTER:Ljava/lang/String; = "org.unifiedpush.android.connector.REGISTER"
+.field private static final ACTION_REGISTER:Ljava/lang/String; = "org.unifiedpush.android.distributor.REGISTER"
 
-.field private static final ACTION_UNREGISTER:Ljava/lang/String; = "org.unifiedpush.android.connector.UNREGISTER"
+.field private static final ACTION_UNREGISTER:Ljava/lang/String; = "org.unifiedpush.android.distributor.UNREGISTER"
 
 .field private static final DEFAULT_DISTRIBUTOR:Ljava/lang/String; = "io.heckel.ntfy"
 
@@ -153,7 +153,7 @@
 
     sput-object v0, Lcom/fcm2up/Fcm2UpShim;->INSTANCE:Lcom/fcm2up/Fcm2UpShim;
 
-    .line 52
+    .line 53
     invoke-static {}, Ljava/util/concurrent/Executors;->newSingleThreadExecutor()Ljava/util/concurrent/ExecutorService;
 
     move-result-object v0
@@ -196,26 +196,26 @@
 
     invoke-static {p2, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
 
-    .line 74
+    .line 75
     sget-object v1, Lcom/fcm2up/Fcm2UpShim;->INSTANCE:Lcom/fcm2up/Fcm2UpShim;
 
     invoke-direct {v1, p0}, Lcom/fcm2up/Fcm2UpShim;->getPrefs(Landroid/content/Context;)Landroid/content/SharedPreferences;
 
     move-result-object v1
 
-    .line 75
+    .line 76
     .local v1, "prefs":Landroid/content/SharedPreferences;
     invoke-interface {v1}, Landroid/content/SharedPreferences;->edit()Landroid/content/SharedPreferences$Editor;
 
     move-result-object v2
 
-    .line 76
+    .line 77
     .local v2, "editor":Landroid/content/SharedPreferences$Editor;
     const-string v3, "bridge_url"
 
     invoke-interface {v2, v3, p1}, Landroid/content/SharedPreferences$Editor;->putString(Ljava/lang/String;Ljava/lang/String;)Landroid/content/SharedPreferences$Editor;
 
-    .line 77
+    .line 78
     invoke-virtual {p2}, Ljava/lang/String;->length()I
 
     move-result v3
@@ -232,7 +232,7 @@
     :goto_28
     invoke-interface {v2, v0, v3}, Landroid/content/SharedPreferences$Editor;->putString(Ljava/lang/String;Ljava/lang/String;)Landroid/content/SharedPreferences$Editor;
 
-    .line 78
+    .line 79
     sget-object v0, Lcom/fcm2up/Fcm2UpShim;->INSTANCE:Lcom/fcm2up/Fcm2UpShim;
 
     invoke-direct {v0, p3}, Lcom/fcm2up/Fcm2UpShim;->notEmpty(Ljava/lang/String;)Z
@@ -245,7 +245,7 @@
 
     invoke-interface {v2, v0, p3}, Landroid/content/SharedPreferences$Editor;->putString(Ljava/lang/String;Ljava/lang/String;)Landroid/content/SharedPreferences$Editor;
 
-    .line 79
+    .line 80
     :cond_38
     sget-object v0, Lcom/fcm2up/Fcm2UpShim;->INSTANCE:Lcom/fcm2up/Fcm2UpShim;
 
@@ -259,7 +259,7 @@
 
     invoke-interface {v2, v0, p4}, Landroid/content/SharedPreferences$Editor;->putString(Ljava/lang/String;Ljava/lang/String;)Landroid/content/SharedPreferences$Editor;
 
-    .line 80
+    .line 81
     :cond_45
     sget-object v0, Lcom/fcm2up/Fcm2UpShim;->INSTANCE:Lcom/fcm2up/Fcm2UpShim;
 
@@ -273,7 +273,7 @@
 
     invoke-interface {v2, v0, p5}, Landroid/content/SharedPreferences$Editor;->putString(Ljava/lang/String;Ljava/lang/String;)Landroid/content/SharedPreferences$Editor;
 
-    .line 81
+    .line 82
     :cond_52
     sget-object v0, Lcom/fcm2up/Fcm2UpShim;->INSTANCE:Lcom/fcm2up/Fcm2UpShim;
 
@@ -287,11 +287,11 @@
 
     invoke-interface {v2, v0, p6}, Landroid/content/SharedPreferences$Editor;->putString(Ljava/lang/String;Ljava/lang/String;)Landroid/content/SharedPreferences$Editor;
 
-    .line 82
+    .line 83
     :cond_5f
     invoke-interface {v2}, Landroid/content/SharedPreferences$Editor;->apply()V
 
-    .line 84
+    .line 85
     new-instance v0, Ljava/lang/StringBuilder;
 
     invoke-direct {v0}, Ljava/lang/StringBuilder;-><init>()V
@@ -362,7 +362,7 @@
 
     invoke-static {v3, v0}, Landroid/util/Log;->i(Ljava/lang/String;Ljava/lang/String;)I
 
-    .line 85
+    .line 86
     return-void
 .end method
 
@@ -370,12 +370,12 @@
     .registers 7
     .param p1, "s"    # Ljava/lang/String;
 
-    .line 446
+    .line 447
     new-instance v0, Ljava/lang/StringBuilder;
 
     invoke-direct {v0}, Ljava/lang/StringBuilder;-><init>()V
 
-    .line 447
+    .line 448
     .local v0, "sb":Ljava/lang/StringBuilder;
     invoke-virtual {p1}, Ljava/lang/String;->length()I
 
@@ -390,11 +390,11 @@
 
     move-result v3
 
-    .line 448
+    .line 449
     .local v3, "c":C
     nop
 
-    .line 449
+    .line 450
     const/16 v4, 0x5c
 
     if-ne v3, v4, :cond_1b
@@ -405,7 +405,7 @@
 
     goto :goto_46
 
-    .line 450
+    .line 451
     :cond_1b
     const/16 v4, 0x22
 
@@ -417,7 +417,7 @@
 
     goto :goto_46
 
-    .line 451
+    .line 452
     :cond_25
     const/16 v4, 0xa
 
@@ -429,7 +429,7 @@
 
     goto :goto_46
 
-    .line 452
+    .line 453
     :cond_2f
     const/16 v4, 0xd
 
@@ -441,7 +441,7 @@
 
     goto :goto_46
 
-    .line 453
+    .line 454
     :cond_39
     const/16 v4, 0x9
 
@@ -453,18 +453,18 @@
 
     goto :goto_46
 
-    .line 454
+    .line 455
     :cond_43
     invoke-virtual {v0, v3}, Ljava/lang/StringBuilder;->append(C)Ljava/lang/StringBuilder;
 
-    .line 447
+    .line 448
     .end local v3    # "c":C
     :goto_46
     add-int/lit8 v2, v2, 0x1
 
     goto :goto_a
 
-    .line 457
+    .line 458
     :cond_49
     invoke-virtual {v0}, Ljava/lang/StringBuilder;->toString()Ljava/lang/String;
 
@@ -494,14 +494,14 @@
 
     invoke-static {p1, v1}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
 
-    .line 319
+    .line 320
     sget-object v1, Lcom/fcm2up/Fcm2UpShim;->INSTANCE:Lcom/fcm2up/Fcm2UpShim;
 
     invoke-direct {v1, p0}, Lcom/fcm2up/Fcm2UpShim;->getPrefs(Landroid/content/Context;)Landroid/content/SharedPreferences;
 
     move-result-object v1
 
-    .line 320
+    .line 321
     .local v1, "prefs":Landroid/content/SharedPreferences;
     const-string v2, "fcm_handler_class"
 
@@ -511,7 +511,7 @@
 
     move-result-object v2
 
-    .line 321
+    .line 322
     .local v2, "handlerClass":Ljava/lang/String;
     const-string v4, "fcm_handler_method"
 
@@ -519,7 +519,7 @@
 
     move-result-object v4
 
-    .line 323
+    .line 324
     .local v4, "handlerMethod":Ljava/lang/String;
     const-string v5, "FCM2UP"
 
@@ -529,11 +529,11 @@
 
     goto/16 :goto_c1
 
-    .line 328
+    .line 329
     :cond_27
     nop
 
-    .line 329
+    .line 330
     :try_start_28
     invoke-static {v2}, Ljava/lang/Class;->forName(Ljava/lang/String;)Ljava/lang/Class;
 
@@ -541,15 +541,15 @@
     :try_end_2c
     .catch Ljava/lang/Exception; {:try_start_28 .. :try_end_2c} :catch_b7
 
-    .line 331
+    .line 332
     .local v6, "clazz":Ljava/lang/Class;
     const/4 v7, 0x0
 
-    .line 332
+    .line 333
     .local v7, "method":Ljava/lang/reflect/Method;
     nop
 
-    .line 333
+    .line 334
     const/4 v8, 0x2
 
     const/4 v9, 0x0
@@ -576,17 +576,17 @@
     .local v11, "method":Ljava/lang/reflect/Method;
     goto :goto_5a
 
-    .line 334
+    .line 335
     .end local v11    # "method":Ljava/lang/reflect/Method;
     .restart local v7    # "method":Ljava/lang/reflect/Method;
     :catch_3e
     move-exception v11
 
-    .line 335
+    .line 336
     .local v11, "e":Ljava/lang/NoSuchMethodException;
     nop
 
-    .line 336
+    .line 337
     :try_start_40
     new-array v12, v8, [Ljava/lang/Class;
 
@@ -611,13 +611,13 @@
 
     goto :goto_5a
 
-    .line 337
+    .line 338
     .end local v12    # "method":Ljava/lang/reflect/Method;
     .restart local v7    # "method":Ljava/lang/reflect/Method;
     :catch_50
     move-exception v12
 
-    .line 338
+    .line 339
     .local v12, "e2":Ljava/lang/NoSuchMethodException;
     :try_start_51
     new-array v13, v10, [Ljava/lang/Class;
@@ -630,30 +630,30 @@
 
     move-object v11, v13
 
-    .line 342
+    .line 343
     .end local v7    # "method":Ljava/lang/reflect/Method;
     .end local v12    # "e2":Ljava/lang/NoSuchMethodException;
     .local v11, "method":Ljava/lang/reflect/Method;
     :goto_5a
     if-eqz v11, :cond_c0
 
-    .line 343
+    .line 344
     invoke-virtual {v11, v10}, Ljava/lang/reflect/Method;->setAccessible(Z)V
 
-    .line 344
+    .line 345
     invoke-virtual {v11}, Ljava/lang/reflect/Method;->getParameterTypes()[Ljava/lang/Class;
 
     move-result-object v7
 
     array-length v7, v7
 
-    .line 345
+    .line 346
     .local v7, "paramCount":I
     packed-switch v7, :pswitch_data_c8
 
     goto :goto_96
 
-    .line 346
+    .line 347
     :pswitch_68
     invoke-virtual {v11}, Ljava/lang/reflect/Method;->getParameterTypes()[Ljava/lang/Class;
 
@@ -667,7 +667,7 @@
 
     if-eqz v0, :cond_7e
 
-    .line 347
+    .line 348
     new-array v0, v8, [Ljava/lang/Object;
 
     aput-object p0, v0, v9
@@ -678,7 +678,7 @@
 
     goto :goto_96
 
-    .line 349
+    .line 350
     :cond_7e
     new-instance v0, Ljava/lang/String;
 
@@ -696,7 +696,7 @@
 
     goto :goto_96
 
-    .line 352
+    .line 353
     :pswitch_8f
     new-array v0, v10, [Ljava/lang/Object;
 
@@ -704,7 +704,7 @@
 
     invoke-virtual {v11, v3, v0}, Ljava/lang/reflect/Method;->invoke(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;
 
-    .line 354
+    .line 355
     :goto_96
     new-instance v0, Ljava/lang/StringBuilder;
 
@@ -740,14 +740,14 @@
 
     goto :goto_c0
 
-    .line 356
+    .line 357
     .end local v6    # "clazz":Ljava/lang/Class;
     .end local v7    # "paramCount":I
     .end local v11    # "method":Ljava/lang/reflect/Method;
     :catch_b7
     move-exception v0
 
-    .line 357
+    .line 358
     .local v0, "e":Ljava/lang/Exception;
     const-string v3, "Failed to forward to FCM handler"
 
@@ -757,20 +757,20 @@
 
     invoke-static {v5, v3, v6}, Landroid/util/Log;->e(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)I
 
-    .line 359
+    .line 360
     .end local v0    # "e":Ljava/lang/Exception;
     :cond_c0
     :goto_c0
     return-void
 
-    .line 324
+    .line 325
     :cond_c1
     :goto_c1
     const-string v0, "No FCM handler configured, message not forwarded"
 
     invoke-static {v5, v0}, Landroid/util/Log;->w(Ljava/lang/String;Ljava/lang/String;)I
 
-    .line 325
+    .line 326
     return-void
 
     nop
@@ -792,7 +792,7 @@
 
     invoke-static {p0, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
 
-    .line 430
+    .line 431
     sget-object v0, Lcom/fcm2up/Fcm2UpShim;->INSTANCE:Lcom/fcm2up/Fcm2UpShim;
 
     invoke-direct {v0, p0}, Lcom/fcm2up/Fcm2UpShim;->getPrefs(Landroid/content/Context;)Landroid/content/SharedPreferences;
@@ -820,14 +820,14 @@
 
     invoke-static {p0, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
 
-    .line 111
+    .line 112
     sget-object v0, Lcom/fcm2up/Fcm2UpShim;->INSTANCE:Lcom/fcm2up/Fcm2UpShim;
 
     invoke-direct {v0, p0}, Lcom/fcm2up/Fcm2UpShim;->getPrefs(Landroid/content/Context;)Landroid/content/SharedPreferences;
 
     move-result-object v0
 
-    .line 112
+    .line 113
     .local v0, "prefs":Landroid/content/SharedPreferences;
     const-string v1, "bridge_fcm_token"
 
@@ -837,7 +837,7 @@
 
     move-result-object v1
 
-    .line 113
+    .line 114
     .local v1, "bridgeToken":Ljava/lang/String;
     if-nez v1, :cond_1b
 
@@ -866,7 +866,7 @@
 
     invoke-static {p0, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
 
-    .line 420
+    .line 421
     sget-object v0, Lcom/fcm2up/Fcm2UpShim;->INSTANCE:Lcom/fcm2up/Fcm2UpShim;
 
     invoke-direct {v0, p0}, Lcom/fcm2up/Fcm2UpShim;->getPrefs(Landroid/content/Context;)Landroid/content/SharedPreferences;
@@ -894,7 +894,7 @@
 
     invoke-static {p0, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
 
-    .line 425
+    .line 426
     sget-object v0, Lcom/fcm2up/Fcm2UpShim;->INSTANCE:Lcom/fcm2up/Fcm2UpShim;
 
     invoke-direct {v0, p0}, Lcom/fcm2up/Fcm2UpShim;->getPrefs(Landroid/content/Context;)Landroid/content/SharedPreferences;
@@ -916,7 +916,7 @@
     .registers 4
     .param p1, "context"    # Landroid/content/Context;
 
-    .line 415
+    .line 416
     const-string v0, "fcm2up_prefs"
 
     const/4 v1, 0x0
@@ -946,18 +946,18 @@
         }
     .end annotation
 
-    .line 434
+    .line 435
     new-instance v0, Ljava/lang/StringBuilder;
 
     const-string v1, "{"
 
     invoke-direct {v0, v1}, Ljava/lang/StringBuilder;-><init>(Ljava/lang/String;)V
 
-    .line 435
+    .line 436
     .local v0, "sb":Ljava/lang/StringBuilder;
     const/4 v1, 0x1
 
-    .line 436
+    .line 437
     .local v1, "first":Z
     invoke-interface {p1}, Ljava/util/Map;->entrySet()Ljava/util/Set;
 
@@ -993,7 +993,7 @@
 
     check-cast v3, Ljava/lang/String;
 
-    .line 437
+    .line 438
     .local v3, "v":Ljava/lang/String;
     if-nez v1, :cond_2f
 
@@ -1001,11 +1001,11 @@
 
     invoke-virtual {v0, v5}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
 
-    .line 438
+    .line 439
     :cond_2f
     const/4 v1, 0x0
 
-    .line 439
+    .line 440
     const-string v5, "\""
 
     invoke-virtual {v0, v5}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
@@ -1038,7 +1038,7 @@
 
     goto :goto_10
 
-    .line 441
+    .line 442
     .end local v3    # "v":Ljava/lang/String;
     .end local v4    # "k":Ljava/lang/String;
     :cond_50
@@ -1046,7 +1046,7 @@
 
     invoke-virtual {v0, v2}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
 
-    .line 442
+    .line 443
     invoke-virtual {v0}, Ljava/lang/StringBuilder;->toString()Ljava/lang/String;
 
     move-result-object v2
@@ -1062,7 +1062,7 @@
     .registers 3
     .param p1, "s"    # Ljava/lang/String;
 
-    .line 55
+    .line 56
     if-eqz p1, :cond_a
 
     invoke-virtual {p1}, Ljava/lang/String;->length()I
@@ -1108,21 +1108,21 @@
 
     invoke-static {p1, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
 
-    .line 121
+    .line 122
     const-string v0, "FCM2UP"
 
     const-string v1, "FCM message received directly (unusual path)"
 
     invoke-static {v0, v1}, Landroid/util/Log;->d(Ljava/lang/String;Ljava/lang/String;)I
 
-    .line 122
+    .line 123
     sget-object v0, Lcom/fcm2up/Fcm2UpShim;->INSTANCE:Lcom/fcm2up/Fcm2UpShim;
 
     invoke-direct {v0, p1}, Lcom/fcm2up/Fcm2UpShim;->mapToJson(Ljava/util/Map;)Ljava/lang/String;
 
     move-result-object v0
 
-    .line 123
+    .line 124
     .local v0, "json":Ljava/lang/String;
     sget-object v1, Lkotlin/text/Charsets;->UTF_8:Ljava/nio/charset/Charset;
 
@@ -1136,7 +1136,7 @@
 
     invoke-static {p0, v1}, Lcom/fcm2up/Fcm2UpShim;->forwardToFcmHandler(Landroid/content/Context;[B)V
 
-    .line 124
+    .line 125
     return-void
 .end method
 
@@ -1155,7 +1155,7 @@
 
     invoke-static {p1, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
 
-    .line 193
+    .line 194
     new-instance v0, Ljava/lang/StringBuilder;
 
     invoke-direct {v0}, Ljava/lang/StringBuilder;-><init>()V
@@ -1186,10 +1186,10 @@
 
     invoke-static {v1, v0}, Landroid/util/Log;->d(Ljava/lang/String;Ljava/lang/String;)I
 
-    .line 194
+    .line 195
     invoke-static {p0, p1}, Lcom/fcm2up/Fcm2UpShim;->forwardToFcmHandler(Landroid/content/Context;[B)V
 
-    .line 195
+    .line 196
     return-void
 .end method
 
@@ -1208,7 +1208,7 @@
 
     invoke-static {p1, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
 
-    .line 183
+    .line 184
     new-instance v0, Ljava/lang/StringBuilder;
 
     invoke-direct {v0}, Ljava/lang/StringBuilder;-><init>()V
@@ -1231,7 +1231,7 @@
 
     invoke-static {v1, v0}, Landroid/util/Log;->i(Ljava/lang/String;Ljava/lang/String;)I
 
-    .line 184
+    .line 185
     sget-object v0, Lcom/fcm2up/Fcm2UpShim;->INSTANCE:Lcom/fcm2up/Fcm2UpShim;
 
     invoke-direct {v0, p0}, Lcom/fcm2up/Fcm2UpShim;->getPrefs(Landroid/content/Context;)Landroid/content/SharedPreferences;
@@ -1250,12 +1250,12 @@
 
     invoke-interface {v0}, Landroid/content/SharedPreferences$Editor;->apply()V
 
-    .line 185
+    .line 186
     sget-object v0, Lcom/fcm2up/Fcm2UpShim;->INSTANCE:Lcom/fcm2up/Fcm2UpShim;
 
     invoke-direct {v0, p0}, Lcom/fcm2up/Fcm2UpShim;->sendRegistrationToBridge(Landroid/content/Context;)V
 
-    .line 186
+    .line 187
     return-void
 .end method
 
@@ -1270,7 +1270,7 @@
 
     invoke-static {p0, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
 
-    .line 202
+    .line 203
     new-instance v0, Ljava/lang/StringBuilder;
 
     invoke-direct {v0}, Ljava/lang/StringBuilder;-><init>()V
@@ -1293,7 +1293,7 @@
 
     invoke-static {v1, v0}, Landroid/util/Log;->e(Ljava/lang/String;Ljava/lang/String;)I
 
-    .line 203
+    .line 204
     return-void
 .end method
 
@@ -1312,22 +1312,22 @@
 
     invoke-static {p1, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
 
-    .line 93
+    .line 94
     sget-boolean v0, Lcom/fcm2up/Fcm2UpShim;->isInjectingToken:Z
 
     const-string v1, "FCM2UP"
 
     if-eqz v0, :cond_16
 
-    .line 94
+    .line 95
     const-string v0, "Ignoring re-entrant onToken call (we triggered this)"
 
     invoke-static {v1, v0}, Landroid/util/Log;->d(Ljava/lang/String;Ljava/lang/String;)I
 
-    .line 95
+    .line 96
     return-void
 
-    .line 98
+    .line 99
     :cond_16
     new-instance v0, Ljava/lang/StringBuilder;
 
@@ -1361,7 +1361,7 @@
 
     invoke-static {v1, v0}, Landroid/util/Log;->d(Ljava/lang/String;Ljava/lang/String;)I
 
-    .line 99
+    .line 100
     sget-object v0, Lcom/fcm2up/Fcm2UpShim;->INSTANCE:Lcom/fcm2up/Fcm2UpShim;
 
     invoke-direct {v0, p0}, Lcom/fcm2up/Fcm2UpShim;->getPrefs(Landroid/content/Context;)Landroid/content/SharedPreferences;
@@ -1380,19 +1380,19 @@
 
     invoke-interface {v0}, Landroid/content/SharedPreferences$Editor;->apply()V
 
-    .line 101
+    .line 102
     invoke-static {p0}, Lcom/fcm2up/Fcm2UpShim;->getEndpoint(Landroid/content/Context;)Ljava/lang/String;
 
     move-result-object v0
 
     if-eqz v0, :cond_53
 
-    .line 102
+    .line 103
     sget-object v0, Lcom/fcm2up/Fcm2UpShim;->INSTANCE:Lcom/fcm2up/Fcm2UpShim;
 
     invoke-direct {v0, p0}, Lcom/fcm2up/Fcm2UpShim;->sendRegistrationToBridge(Landroid/content/Context;)V
 
-    .line 104
+    .line 105
     :cond_53
     return-void
 .end method
@@ -1407,14 +1407,14 @@
 
     invoke-static {p0, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
 
-    .line 210
+    .line 211
     const-string v0, "FCM2UP"
 
     const-string v1, "Unregistered from UnifiedPush"
 
     invoke-static {v0, v1}, Landroid/util/Log;->i(Ljava/lang/String;Ljava/lang/String;)I
 
-    .line 211
+    .line 212
     sget-object v0, Lcom/fcm2up/Fcm2UpShim;->INSTANCE:Lcom/fcm2up/Fcm2UpShim;
 
     invoke-direct {v0, p0}, Lcom/fcm2up/Fcm2UpShim;->getPrefs(Landroid/content/Context;)Landroid/content/SharedPreferences;
@@ -1425,26 +1425,26 @@
 
     move-result-object v0
 
-    .line 212
+    .line 213
     .local v0, "editor":Landroid/content/SharedPreferences$Editor;
     const-string v1, "up_endpoint"
 
     invoke-interface {v0, v1}, Landroid/content/SharedPreferences$Editor;->remove(Ljava/lang/String;)Landroid/content/SharedPreferences$Editor;
 
-    .line 213
+    .line 214
     const-string v1, "up_token"
 
     invoke-interface {v0, v1}, Landroid/content/SharedPreferences$Editor;->remove(Ljava/lang/String;)Landroid/content/SharedPreferences$Editor;
 
-    .line 214
+    .line 215
     const-string v1, "bridge_fcm_token"
 
     invoke-interface {v0, v1}, Landroid/content/SharedPreferences$Editor;->remove(Ljava/lang/String;)Landroid/content/SharedPreferences$Editor;
 
-    .line 215
+    .line 216
     invoke-interface {v0}, Landroid/content/SharedPreferences$Editor;->apply()V
 
-    .line 216
+    .line 217
     return-void
 .end method
 
@@ -1453,14 +1453,14 @@
     .param p1, "s"    # Ljava/lang/String;
     .param p2, "len"    # I
 
-    .line 57
+    .line 58
     if-nez p1, :cond_5
 
     const-string v0, "null"
 
     return-object v0
 
-    .line 58
+    .line 59
     :cond_5
     invoke-virtual {p1}, Ljava/lang/String;->length()I
 
@@ -1508,7 +1508,7 @@
 .method static synthetic preview$default(Lcom/fcm2up/Fcm2UpShim;Ljava/lang/String;IILjava/lang/Object;)Ljava/lang/String;
     .registers 5
 
-    .line 56
+    .line 57
     and-int/lit8 p3, p3, 0x2
 
     if-eqz p3, :cond_6
@@ -1533,21 +1533,21 @@
 
     invoke-static {p0, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
 
-    .line 131
+    .line 132
     const-string v0, "Registering with UnifiedPush"
 
     const-string v1, "FCM2UP"
 
     invoke-static {v1, v0}, Landroid/util/Log;->i(Ljava/lang/String;Ljava/lang/String;)I
 
-    .line 133
+    .line 134
     sget-object v0, Lcom/fcm2up/Fcm2UpShim;->INSTANCE:Lcom/fcm2up/Fcm2UpShim;
 
     invoke-direct {v0, p0}, Lcom/fcm2up/Fcm2UpShim;->getPrefs(Landroid/content/Context;)Landroid/content/SharedPreferences;
 
     move-result-object v0
 
-    .line 134
+    .line 135
     .local v0, "prefs":Landroid/content/SharedPreferences;
     const-string v2, "up_token"
 
@@ -1557,11 +1557,11 @@
 
     move-result-object v4
 
-    .line 135
+    .line 136
     .local v4, "token":Ljava/lang/String;
     if-nez v4, :cond_2e
 
-    .line 136
+    .line 137
     invoke-static {}, Ljava/util/UUID;->randomUUID()Ljava/util/UUID;
 
     move-result-object v5
@@ -1570,7 +1570,7 @@
 
     move-result-object v4
 
-    .line 137
+    .line 138
     invoke-interface {v0}, Landroid/content/SharedPreferences;->edit()Landroid/content/SharedPreferences$Editor;
 
     move-result-object v5
@@ -1581,7 +1581,7 @@
 
     invoke-interface {v2}, Landroid/content/SharedPreferences$Editor;->apply()V
 
-    .line 140
+    .line 141
     :cond_2e
     const-string v2, "distributor"
 
@@ -1593,24 +1593,24 @@
 
     invoke-static {v2}, Lkotlin/jvm/internal/Intrinsics;->checkNotNull(Ljava/lang/Object;)V
 
-    .line 142
+    .line 143
     .local v2, "distributor":Ljava/lang/String;
     new-instance v5, Landroid/content/Intent;
 
-    const-string v6, "org.unifiedpush.android.connector.REGISTER"
+    const-string v6, "org.unifiedpush.android.distributor.REGISTER"
 
     invoke-direct {v5, v6}, Landroid/content/Intent;-><init>(Ljava/lang/String;)V
 
-    .line 143
+    .line 144
     .local v5, "intent":Landroid/content/Intent;
     invoke-virtual {v5, v2}, Landroid/content/Intent;->setPackage(Ljava/lang/String;)Landroid/content/Intent;
 
-    .line 144
+    .line 145
     const-string v6, "token"
 
     invoke-virtual {v5, v6, v4}, Landroid/content/Intent;->putExtra(Ljava/lang/String;Ljava/lang/String;)Landroid/content/Intent;
 
-    .line 145
+    .line 146
     const-string v6, "application"
 
     invoke-virtual {p0}, Landroid/content/Context;->getPackageName()Ljava/lang/String;
@@ -1619,14 +1619,14 @@
 
     invoke-virtual {v5, v6, v7}, Landroid/content/Intent;->putExtra(Ljava/lang/String;Ljava/lang/String;)Landroid/content/Intent;
 
-    .line 147
+    .line 148
     sget v6, Landroid/os/Build$VERSION;->SDK_INT:I
 
     const/16 v7, 0x22
 
     if-lt v6, v7, :cond_6c
 
-    .line 148
+    .line 149
     invoke-static {}, Landroid/app/BroadcastOptions;->makeBasic()Landroid/app/BroadcastOptions;
 
     move-result-object v6
@@ -1635,13 +1635,13 @@
 
     invoke-static {v6, v7}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullExpressionValue(Ljava/lang/Object;Ljava/lang/String;)V
 
-    .line 149
+    .line 150
     .local v6, "options":Landroid/app/BroadcastOptions;
     const/4 v7, 0x1
 
     invoke-virtual {v6, v7}, Landroid/app/BroadcastOptions;->setShareIdentityEnabled(Z)Landroid/app/BroadcastOptions;
 
-    .line 150
+    .line 151
     invoke-virtual {v6}, Landroid/app/BroadcastOptions;->toBundle()Landroid/os/Bundle;
 
     move-result-object v7
@@ -1651,11 +1651,11 @@
     .end local v6    # "options":Landroid/app/BroadcastOptions;
     goto :goto_6f
 
-    .line 152
+    .line 153
     :cond_6c
     invoke-virtual {p0, v5}, Landroid/content/Context;->sendBroadcast(Landroid/content/Intent;)V
 
-    .line 155
+    .line 156
     :goto_6f
     new-instance v3, Ljava/lang/StringBuilder;
 
@@ -1687,7 +1687,7 @@
 
     invoke-static {v1, v3}, Landroid/util/Log;->d(Ljava/lang/String;Ljava/lang/String;)I
 
-    .line 156
+    .line 157
     return-void
 .end method
 
@@ -1695,12 +1695,12 @@
     .registers 12
     .param p1, "context"    # Landroid/content/Context;
 
-    .line 219
+    .line 220
     invoke-direct {p0, p1}, Lcom/fcm2up/Fcm2UpShim;->getPrefs(Landroid/content/Context;)Landroid/content/SharedPreferences;
 
     move-result-object v7
 
-    .line 220
+    .line 221
     .local v7, "prefs":Landroid/content/SharedPreferences;
     const-string v0, "up_endpoint"
 
@@ -1710,7 +1710,7 @@
 
     move-result-object v2
 
-    .line 221
+    .line 222
     .local v2, "endpoint":Ljava/lang/String;
     const-string v0, "bridge_url"
 
@@ -1718,7 +1718,7 @@
 
     move-result-object v0
 
-    .line 222
+    .line 223
     .local v0, "bridgeUrl":Ljava/lang/String;
     const-string v3, "firebase_app_id"
 
@@ -1726,7 +1726,7 @@
 
     move-result-object v4
 
-    .line 223
+    .line 224
     .local v4, "firebaseAppId":Ljava/lang/String;
     const-string v3, "firebase_project_id"
 
@@ -1734,7 +1734,7 @@
 
     move-result-object v5
 
-    .line 224
+    .line 225
     .local v5, "firebaseProjectId":Ljava/lang/String;
     const-string v3, "firebase_api_key"
 
@@ -1742,7 +1742,7 @@
 
     move-result-object v6
 
-    .line 226
+    .line 227
     .local v6, "firebaseApiKey":Ljava/lang/String;
     const-string v1, "FCM2UP"
 
@@ -1756,7 +1756,7 @@
 
     goto :goto_4b
 
-    .line 231
+    .line 232
     :cond_2c
     if-eqz v4, :cond_32
 
@@ -1764,19 +1764,19 @@
 
     if-nez v6, :cond_37
 
-    .line 232
+    .line 233
     :cond_32
     const-string v3, "Missing Firebase credentials - bridge won\'t be able to receive FCM"
 
     invoke-static {v1, v3}, Landroid/util/Log;->w(Ljava/lang/String;Ljava/lang/String;)I
 
-    .line 235
+    .line 236
     :cond_37
     invoke-virtual {p1}, Landroid/content/Context;->getPackageName()Ljava/lang/String;
 
     move-result-object v3
 
-    .line 237
+    .line 238
     .local v3, "packageName":Ljava/lang/String;
     sget-object v9, Lcom/fcm2up/Fcm2UpShim;->executor:Ljava/util/concurrent/ExecutorService;
 
@@ -1798,10 +1798,10 @@
     .local p1, "bridgeUrl":Ljava/lang/String;
     invoke-interface {v9, v0}, Ljava/util/concurrent/ExecutorService;->execute(Ljava/lang/Runnable;)V
 
-    .line 301
+    .line 302
     return-void
 
-    .line 226
+    .line 227
     .end local v3    # "packageName":Ljava/lang/String;
     .end local v8    # "context":Landroid/content/Context;
     .restart local v0    # "bridgeUrl":Ljava/lang/String;
@@ -1811,7 +1811,7 @@
 
     move-object p1, v0
 
-    .line 227
+    .line 228
     .end local v0    # "bridgeUrl":Ljava/lang/String;
     .restart local v8    # "context":Landroid/content/Context;
     .local p1, "bridgeUrl":Ljava/lang/String;
@@ -1820,7 +1820,7 @@
 
     invoke-static {v1, v0}, Landroid/util/Log;->d(Ljava/lang/String;Ljava/lang/String;)I
 
-    .line 228
+    .line 229
     return-void
 .end method
 
@@ -1855,10 +1855,10 @@
 
     invoke-static {v4, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
 
-    .line 238
+    .line 239
     nop
 
-    .line 239
+    .line 240
     :try_start_17
     new-instance v0, Ljava/net/URL;
 
@@ -1886,7 +1886,7 @@
 
     move-object v7, v0
 
-    .line 240
+    .line 241
     .local v7, "url":Ljava/net/URL;
     invoke-virtual {v7}, Ljava/net/URL;->openConnection()Ljava/net/URLConnection;
 
@@ -1900,40 +1900,40 @@
 
     move-object v9, v0
 
-    .line 241
+    .line 242
     .local v9, "conn":Ljava/net/HttpURLConnection;
     const-string v0, "POST"
 
     invoke-virtual {v9, v0}, Ljava/net/HttpURLConnection;->setRequestMethod(Ljava/lang/String;)V
 
-    .line 242
+    .line 243
     const/4 v0, 0x1
 
     invoke-virtual {v9, v0}, Ljava/net/HttpURLConnection;->setDoOutput(Z)V
 
-    .line 243
+    .line 244
     const-string v0, "Content-Type"
 
     const-string v10, "application/json"
 
     invoke-virtual {v9, v0, v10}, Ljava/net/HttpURLConnection;->setRequestProperty(Ljava/lang/String;Ljava/lang/String;)V
 
-    .line 244
+    .line 245
     const/16 v0, 0x2710
 
     invoke-virtual {v9, v0}, Ljava/net/HttpURLConnection;->setConnectTimeout(I)V
 
-    .line 245
+    .line 246
     invoke-virtual {v9, v0}, Ljava/net/HttpURLConnection;->setReadTimeout(I)V
 
-    .line 247
+    .line 248
     new-instance v0, Lorg/json/JSONObject;
 
     invoke-direct {v0}, Lorg/json/JSONObject;-><init>()V
 
     move-object v10, v0
 
-    .line 248
+    .line 249
     .local v10, "jsonObj":Lorg/json/JSONObject;
     const-string v0, "endpoint"
     :try_end_5e
@@ -1944,7 +1944,7 @@
     :try_start_60
     invoke-virtual {v10, v0, v11}, Lorg/json/JSONObject;->put(Ljava/lang/String;Ljava/lang/Object;)Lorg/json/JSONObject;
 
-    .line 249
+    .line 250
     const-string v0, "app_id"
     :try_end_65
     .catch Ljava/lang/Exception; {:try_start_60 .. :try_end_65} :catch_1b5
@@ -1954,14 +1954,14 @@
     :try_start_67
     invoke-virtual {v10, v0, v12}, Lorg/json/JSONObject;->put(Ljava/lang/String;Ljava/lang/Object;)Lorg/json/JSONObject;
 
-    .line 250
+    .line 251
     if-eqz v1, :cond_71
 
     const-string v0, "firebase_app_id"
 
     invoke-virtual {v10, v0, v1}, Lorg/json/JSONObject;->put(Ljava/lang/String;Ljava/lang/Object;)Lorg/json/JSONObject;
 
-    .line 251
+    .line 252
     :cond_71
     if-eqz v2, :cond_78
 
@@ -1969,7 +1969,7 @@
 
     invoke-virtual {v10, v0, v2}, Lorg/json/JSONObject;->put(Ljava/lang/String;Ljava/lang/Object;)Lorg/json/JSONObject;
 
-    .line 252
+    .line 253
     :cond_78
     if-eqz v3, :cond_7f
 
@@ -1977,7 +1977,7 @@
 
     invoke-virtual {v10, v0, v3}, Lorg/json/JSONObject;->put(Ljava/lang/String;Ljava/lang/Object;)Lorg/json/JSONObject;
 
-    .line 254
+    .line 255
     :cond_7f
     new-instance v0, Ljava/io/OutputStreamWriter;
 
@@ -1989,7 +1989,7 @@
 
     move-object v13, v0
 
-    .line 255
+    .line 256
     .local v13, "writer":Ljava/io/OutputStreamWriter;
     invoke-virtual {v10}, Lorg/json/JSONObject;->toString()Ljava/lang/String;
 
@@ -1997,26 +1997,26 @@
 
     invoke-virtual {v13, v0}, Ljava/io/OutputStreamWriter;->write(Ljava/lang/String;)V
 
-    .line 256
+    .line 257
     invoke-virtual {v13}, Ljava/io/OutputStreamWriter;->flush()V
 
-    .line 257
+    .line 258
     invoke-virtual {v13}, Ljava/io/OutputStreamWriter;->close()V
 
-    .line 259
+    .line 260
     invoke-virtual {v9}, Ljava/net/HttpURLConnection;->getResponseCode()I
 
     move-result v0
 
     move v14, v0
 
-    .line 260
+    .line 261
     .local v14, "responseCode":I
     const/16 v0, 0xc8
 
     if-ne v14, v0, :cond_167
 
-    .line 261
+    .line 262
     new-instance v0, Ljava/io/BufferedReader;
 
     new-instance v15, Ljava/io/InputStreamReader;
@@ -2033,7 +2033,7 @@
 
     move-object v1, v0
 
-    .line 262
+    .line 263
     .local v1, "reader":Ljava/io/BufferedReader;
     new-instance v0, Ljava/lang/StringBuilder;
 
@@ -2041,7 +2041,7 @@
 
     move-object v15, v0
 
-    .line 263
+    .line 264
     .local v15, "sb":Ljava/lang/StringBuilder;
     invoke-virtual {v1}, Ljava/io/BufferedReader;->readLine()Ljava/lang/String;
 
@@ -2051,16 +2051,16 @@
 
     move-object v1, v0
 
-    .line 264
+    .line 265
     .local v1, "line":Ljava/lang/String;
     .local v16, "reader":Ljava/io/BufferedReader;
     :goto_bd
     if-eqz v1, :cond_c8
 
-    .line 265
+    .line 266
     invoke-virtual {v15, v1}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
 
-    .line 266
+    .line 267
     invoke-virtual/range {v16 .. v16}, Ljava/io/BufferedReader;->readLine()Ljava/lang/String;
 
     move-result-object v0
@@ -2069,11 +2069,11 @@
 
     goto :goto_bd
 
-    .line 268
+    .line 269
     :cond_c8
     invoke-virtual/range {v16 .. v16}, Ljava/io/BufferedReader;->close()V
 
-    .line 270
+    .line 271
     invoke-virtual {v15}, Ljava/lang/StringBuilder;->toString()Ljava/lang/String;
 
     move-result-object v0
@@ -2090,17 +2090,17 @@
 
     move-object v1, v0
 
-    .line 271
+    .line 272
     .local v1, "responseBody":Ljava/lang/String;
     nop
 
-    .line 272
+    .line 273
     :try_start_d8
     new-instance v0, Lorg/json/JSONObject;
 
     invoke-direct {v0, v1}, Lorg/json/JSONObject;-><init>(Ljava/lang/String;)V
 
-    .line 273
+    .line 274
     .local v0, "response":Lorg/json/JSONObject;
     const-string v2, "fcm_token"
 
@@ -2110,7 +2110,7 @@
 
     move-result-object v2
 
-    .line 274
+    .line 275
     .local v2, "bridgeFcmToken":Ljava/lang/String;
     sget-object v3, Lcom/fcm2up/Fcm2UpShim;->INSTANCE:Lcom/fcm2up/Fcm2UpShim;
 
@@ -2120,7 +2120,7 @@
 
     if-eqz v3, :cond_125
 
-    .line 275
+    .line 276
     invoke-interface {v6}, Landroid/content/SharedPreferences;->edit()Landroid/content/SharedPreferences$Editor;
 
     move-result-object v3
@@ -2133,7 +2133,7 @@
 
     invoke-interface {v3}, Landroid/content/SharedPreferences$Editor;->apply()V
 
-    .line 276
+    .line 277
     new-instance v3, Ljava/lang/StringBuilder;
 
     invoke-direct {v3}, Ljava/lang/StringBuilder;-><init>()V
@@ -2177,7 +2177,7 @@
 
     invoke-static {v5, v3}, Landroid/util/Log;->i(Ljava/lang/String;Ljava/lang/String;)I
 
-    .line 280
+    .line 281
     sget-object v3, Lcom/fcm2up/Fcm2UpShim;->INSTANCE:Lcom/fcm2up/Fcm2UpShim;
 
     invoke-static {v2}, Lkotlin/jvm/internal/Intrinsics;->checkNotNull(Ljava/lang/Object;)V
@@ -2186,7 +2186,7 @@
 
     goto :goto_129
 
-    .line 274
+    .line 275
     .end local v18    # "url":Ljava/net/URL;
     .end local v19    # "conn":Ljava/net/HttpURLConnection;
     .restart local v7    # "url":Ljava/net/URL;
@@ -2196,7 +2196,7 @@
 
     move-object/from16 v19, v9
 
-    .line 282
+    .line 283
     .end local v7    # "url":Ljava/net/URL;
     .end local v9    # "conn":Ljava/net/HttpURLConnection;
     .restart local v18    # "url":Ljava/net/URL;
@@ -2234,7 +2234,7 @@
 
     goto/16 :goto_1c4
 
-    .line 283
+    .line 284
     .end local v0    # "response":Lorg/json/JSONObject;
     .end local v2    # "bridgeFcmToken":Ljava/lang/String;
     :catch_149
@@ -2253,7 +2253,7 @@
 
     move-object/from16 v19, v9
 
-    .line 284
+    .line 285
     .end local v7    # "url":Ljava/net/URL;
     .end local v9    # "conn":Ljava/net/HttpURLConnection;
     .local v0, "e":Ljava/lang/Exception;
@@ -2283,7 +2283,7 @@
 
     goto :goto_1c4
 
-    .line 287
+    .line 288
     .end local v0    # "e":Ljava/lang/Exception;
     .end local v1    # "responseBody":Ljava/lang/String;
     .end local v15    # "sb":Ljava/lang/StringBuilder;
@@ -2316,27 +2316,27 @@
 
     invoke-direct {v0, v1}, Ljava/io/BufferedReader;-><init>(Ljava/io/Reader;)V
 
-    .line 288
+    .line 289
     .local v0, "reader":Ljava/io/BufferedReader;
     new-instance v1, Ljava/lang/StringBuilder;
 
     invoke-direct {v1}, Ljava/lang/StringBuilder;-><init>()V
 
-    .line 289
+    .line 290
     .local v1, "sb":Ljava/lang/StringBuilder;
     invoke-virtual {v0}, Ljava/io/BufferedReader;->readLine()Ljava/lang/String;
 
     move-result-object v2
 
-    .line 290
+    .line 291
     .local v2, "line":Ljava/lang/String;
     :goto_184
     if-eqz v2, :cond_18f
 
-    .line 291
+    .line 292
     invoke-virtual {v1, v2}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
 
-    .line 292
+    .line 293
     invoke-virtual {v0}, Ljava/io/BufferedReader;->readLine()Ljava/lang/String;
 
     move-result-object v3
@@ -2345,11 +2345,11 @@
 
     goto :goto_184
 
-    .line 294
+    .line 295
     :cond_18f
     invoke-virtual {v0}, Ljava/io/BufferedReader;->close()V
 
-    .line 295
+    .line 296
     new-instance v3, Ljava/lang/StringBuilder;
 
     invoke-direct {v3}, Ljava/lang/StringBuilder;-><init>()V
@@ -2384,7 +2384,7 @@
 
     goto :goto_1c4
 
-    .line 297
+    .line 298
     .end local v0    # "reader":Ljava/io/BufferedReader;
     .end local v1    # "sb":Ljava/lang/StringBuilder;
     .end local v2    # "line":Ljava/lang/String;
@@ -2411,7 +2411,7 @@
     :goto_1ba
     move-object/from16 v12, p2
 
-    .line 298
+    .line 299
     .local v0, "e":Ljava/lang/Exception;
     :goto_1bc
     const-string v1, "Bridge registration error"
@@ -2422,7 +2422,7 @@
 
     invoke-static {v5, v1, v2}, Landroid/util/Log;->e(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)I
 
-    .line 300
+    .line 301
     .end local v0    # "e":Ljava/lang/Exception;
     :goto_1c4
     return-void
@@ -2448,7 +2448,7 @@
 
     invoke-static {p2, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
 
-    .line 308
+    .line 309
     sget-object v0, Lcom/fcm2up/Fcm2UpShim;->INSTANCE:Lcom/fcm2up/Fcm2UpShim;
 
     invoke-direct {v0, p0}, Lcom/fcm2up/Fcm2UpShim;->getPrefs(Landroid/content/Context;)Landroid/content/SharedPreferences;
@@ -2459,21 +2459,21 @@
 
     move-result-object v0
 
-    .line 309
+    .line 310
     .local v0, "editor":Landroid/content/SharedPreferences$Editor;
     const-string v1, "fcm_handler_class"
 
     invoke-interface {v0, v1, p1}, Landroid/content/SharedPreferences$Editor;->putString(Ljava/lang/String;Ljava/lang/String;)Landroid/content/SharedPreferences$Editor;
 
-    .line 310
+    .line 311
     const-string v1, "fcm_handler_method"
 
     invoke-interface {v0, v1, p2}, Landroid/content/SharedPreferences$Editor;->putString(Ljava/lang/String;Ljava/lang/String;)Landroid/content/SharedPreferences$Editor;
 
-    .line 311
+    .line 312
     invoke-interface {v0}, Landroid/content/SharedPreferences$Editor;->apply()V
 
-    .line 312
+    .line 313
     return-void
 .end method
 
@@ -2482,12 +2482,12 @@
     .param p1, "context"    # Landroid/content/Context;
     .param p2, "bridgeToken"    # Ljava/lang/String;
 
-    .line 366
+    .line 367
     invoke-direct {p0, p1}, Lcom/fcm2up/Fcm2UpShim;->getPrefs(Landroid/content/Context;)Landroid/content/SharedPreferences;
 
     move-result-object v0
 
-    .line 367
+    .line 368
     .local v0, "prefs":Landroid/content/SharedPreferences;
     const-string v1, "fcm_service_class"
 
@@ -2497,7 +2497,7 @@
 
     move-result-object v1
 
-    .line 369
+    .line 370
     .local v1, "fcmServiceClass":Ljava/lang/String;
     const-string v3, "FCM2UP"
 
@@ -2511,7 +2511,7 @@
 
     goto/16 :goto_9f
 
-    .line 374
+    .line 375
     :cond_17
     new-instance v4, Ljava/lang/StringBuilder;
 
@@ -2541,16 +2541,16 @@
 
     invoke-static {v3, v2}, Landroid/util/Log;->i(Ljava/lang/String;Ljava/lang/String;)I
 
-    .line 376
+    .line 377
     nop
 
-    .line 377
+    .line 378
     :try_start_34
     invoke-static {v1}, Ljava/lang/Class;->forName(Ljava/lang/String;)Ljava/lang/Class;
 
     move-result-object v2
 
-    .line 380
+    .line 381
     .local v2, "clazz":Ljava/lang/Class;
     const-string v4, "onNewToken"
 
@@ -2566,29 +2566,29 @@
 
     move-result-object v4
 
-    .line 381
+    .line 382
     .local v4, "method":Ljava/lang/reflect/Method;
     invoke-virtual {v4, v5}, Ljava/lang/reflect/Method;->setAccessible(Z)V
 
-    .line 384
+    .line 385
     new-array v7, v6, [Ljava/lang/Class;
 
     invoke-virtual {v2, v7}, Ljava/lang/Class;->getDeclaredConstructor([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;
 
     move-result-object v7
 
-    .line 385
+    .line 386
     .local v7, "constructor":Ljava/lang/reflect/Constructor;
     invoke-virtual {v7, v5}, Ljava/lang/reflect/Constructor;->setAccessible(Z)V
 
-    .line 386
+    .line 387
     new-array v8, v6, [Ljava/lang/Object;
 
     invoke-virtual {v7, v8}, Ljava/lang/reflect/Constructor;->newInstance([Ljava/lang/Object;)Ljava/lang/Object;
 
     move-result-object v8
 
-    .line 391
+    .line 392
     .local v8, "instance":Ljava/lang/Object;
     instance-of v9, v8, Landroid/content/ContextWrapper;
 
@@ -2596,7 +2596,7 @@
 
     const-class v9, Landroid/content/ContextWrapper;
 
-    .line 393
+    .line 394
     const-string v10, "attachBaseContext"
 
     new-array v11, v5, [Ljava/lang/Class;
@@ -2609,14 +2609,14 @@
 
     move-result-object v9
 
-    .line 392
+    .line 393
     nop
 
-    .line 394
+    .line 395
     .local v9, "attachMethod":Ljava/lang/reflect/Method;
     invoke-virtual {v9, v5}, Ljava/lang/reflect/Method;->setAccessible(Z)V
 
-    .line 395
+    .line 396
     invoke-virtual {p1}, Landroid/content/Context;->getApplicationContext()Landroid/content/Context;
 
     move-result-object v10
@@ -2627,22 +2627,22 @@
 
     invoke-virtual {v9, v8, v11}, Ljava/lang/reflect/Method;->invoke(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;
 
-    .line 396
+    .line 397
     const-string v10, "Attached context to FCM service instance"
 
     invoke-static {v3, v10}, Landroid/util/Log;->d(Ljava/lang/String;Ljava/lang/String;)I
 
-    .line 401
+    .line 402
     .end local v9    # "attachMethod":Ljava/lang/reflect/Method;
     :cond_7d
     sput-boolean v5, Lcom/fcm2up/Fcm2UpShim;->isInjectingToken:Z
     :try_end_7f
     .catch Ljava/lang/Exception; {:try_start_34 .. :try_end_7f} :catch_93
 
-    .line 402
+    .line 403
     nop
 
-    .line 403
+    .line 404
     :try_start_80
     new-array v5, v5, [Ljava/lang/Object;
 
@@ -2650,21 +2650,21 @@
 
     invoke-virtual {v4, v8, v5}, Ljava/lang/reflect/Method;->invoke(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;
 
-    .line 404
+    .line 405
     const-string v5, "Successfully injected bridge token into app\'s onNewToken"
 
     invoke-static {v3, v5}, Landroid/util/Log;->i(Ljava/lang/String;Ljava/lang/String;)I
     :try_end_8c
     .catchall {:try_start_80 .. :try_end_8c} :catchall_8f
 
-    .line 406
+    .line 407
     :try_start_8c
     sput-boolean v6, Lcom/fcm2up/Fcm2UpShim;->isInjectingToken:Z
 
-    .line 407
+    .line 408
     goto :goto_9e
 
-    .line 406
+    .line 407
     :catchall_8f
     move-exception v5
 
@@ -2678,7 +2678,7 @@
     :try_end_93
     .catch Ljava/lang/Exception; {:try_start_8c .. :try_end_93} :catch_93
 
-    .line 408
+    .line 409
     .end local v2    # "clazz":Ljava/lang/Class;
     .end local v4    # "method":Ljava/lang/reflect/Method;
     .end local v7    # "constructor":Ljava/lang/reflect/Constructor;
@@ -2690,7 +2690,7 @@
     :catch_93
     move-exception v2
 
-    .line 409
+    .line 410
     .local v2, "e":Ljava/lang/Exception;
     const-string v4, "Failed to trigger app\'s onNewToken"
 
@@ -2700,22 +2700,22 @@
 
     invoke-static {v3, v4, v5}, Landroid/util/Log;->e(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)I
 
-    .line 410
+    .line 411
     sput-boolean v6, Lcom/fcm2up/Fcm2UpShim;->isInjectingToken:Z
 
-    .line 412
+    .line 413
     .end local v2    # "e":Ljava/lang/Exception;
     :goto_9e
     return-void
 
-    .line 370
+    .line 371
     :cond_9f
     :goto_9f
     const-string v2, "No FCM service class configured, cannot inject bridge token"
 
     invoke-static {v3, v2}, Landroid/util/Log;->w(Ljava/lang/String;Ljava/lang/String;)I
 
-    .line 371
+    .line 372
     return-void
 .end method
 
@@ -2729,14 +2729,14 @@
 
     invoke-static {p0, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
 
-    .line 163
+    .line 164
     sget-object v0, Lcom/fcm2up/Fcm2UpShim;->INSTANCE:Lcom/fcm2up/Fcm2UpShim;
 
     invoke-direct {v0, p0}, Lcom/fcm2up/Fcm2UpShim;->getPrefs(Landroid/content/Context;)Landroid/content/SharedPreferences;
 
     move-result-object v0
 
-    .line 164
+    .line 165
     .local v0, "prefs":Landroid/content/SharedPreferences;
     const-string v1, "up_token"
 
@@ -2746,13 +2746,13 @@
 
     move-result-object v1
 
-    .line 165
+    .line 166
     .local v1, "token":Ljava/lang/String;
     if-nez v1, :cond_15
 
     return-void
 
-    .line 167
+    .line 168
     :cond_15
     const-string v2, "distributor"
 
@@ -2764,24 +2764,24 @@
 
     invoke-static {v2}, Lkotlin/jvm/internal/Intrinsics;->checkNotNull(Ljava/lang/Object;)V
 
-    .line 169
+    .line 170
     .local v2, "distributor":Ljava/lang/String;
     new-instance v3, Landroid/content/Intent;
 
-    const-string v4, "org.unifiedpush.android.connector.UNREGISTER"
+    const-string v4, "org.unifiedpush.android.distributor.UNREGISTER"
 
     invoke-direct {v3, v4}, Landroid/content/Intent;-><init>(Ljava/lang/String;)V
 
-    .line 170
+    .line 171
     .local v3, "intent":Landroid/content/Intent;
     invoke-virtual {v3, v2}, Landroid/content/Intent;->setPackage(Ljava/lang/String;)Landroid/content/Intent;
 
-    .line 171
+    .line 172
     const-string v4, "token"
 
     invoke-virtual {v3, v4, v1}, Landroid/content/Intent;->putExtra(Ljava/lang/String;Ljava/lang/String;)Landroid/content/Intent;
 
-    .line 172
+    .line 173
     const-string v4, "application"
 
     invoke-virtual {p0}, Landroid/content/Context;->getPackageName()Ljava/lang/String;
@@ -2790,10 +2790,10 @@
 
     invoke-virtual {v3, v4, v5}, Landroid/content/Intent;->putExtra(Ljava/lang/String;Ljava/lang/String;)Landroid/content/Intent;
 
-    .line 174
+    .line 175
     invoke-virtual {p0, v3}, Landroid/content/Context;->sendBroadcast(Landroid/content/Intent;)V
 
-    .line 175
+    .line 176
     new-instance v4, Ljava/lang/StringBuilder;
 
     invoke-direct {v4}, Ljava/lang/StringBuilder;-><init>()V
@@ -2816,6 +2816,6 @@
 
     invoke-static {v5, v4}, Landroid/util/Log;->i(Ljava/lang/String;Ljava/lang/String;)I
 
-    .line 176
+    .line 177
     return-void
 .end method

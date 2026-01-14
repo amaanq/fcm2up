@@ -39,13 +39,14 @@ object Fcm2UpShim {
     private const val KEY_FCM_HANDLER_METHOD = "fcm_handler_method"
     private const val KEY_FCM_SERVICE_CLASS = "fcm_service_class"
 
-    private const val ACTION_REGISTER = "org.unifiedpush.android.connector.REGISTER"
+    // Actions we SEND to the distributor (ntfy)
+    private const val ACTION_REGISTER = "org.unifiedpush.android.distributor.REGISTER"
+    private const val ACTION_UNREGISTER = "org.unifiedpush.android.distributor.UNREGISTER"
 
     // Re-entry guard: set to true when WE are triggering onNewToken
     // This prevents infinite loops when our injected hook fires
     @Volatile
     private var isInjectingToken = false
-    private const val ACTION_UNREGISTER = "org.unifiedpush.android.connector.UNREGISTER"
 
     private const val DEFAULT_DISTRIBUTOR = "io.heckel.ntfy"
 
