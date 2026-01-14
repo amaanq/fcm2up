@@ -114,21 +114,45 @@ impl GcmSession {
     /// * `http` - HTTP client
     /// * `sender_id` - Firebase sender ID (project number), e.g., "890224420307"
     /// * `package_name` - Android package name, e.g., "com.github.android"
+    /// * `firebase_app_id` - Full Firebase app ID, e.g., "1:890224420307:android:835ea94c9a536bb0"
+    /// * `cert_sha1` - SHA1 of signing certificate (uppercase hex, no colons), or None
     pub async fn register(
         &self,
         http: &reqwest::Client,
         sender_id: &str,
         package_name: &str,
+        firebase_app_id: Option<&str>,
+        cert_sha1: Option<&str>,
     ) -> Result<GcmToken, Error> {
         let android_id = self.android_id.to_string();
         let auth_header = format!("AidLogin {}:{}", &android_id, &self.security_token);
 
-        // Build registration parameters - these are for Android FCM, not web push
-        let mut params = std::collections::HashMap::with_capacity(5);
+        // Build registration parameters matching what actual GMS sends
+        // See bvaz.java:265-284 in GMS source
+        let mut params = std::collections::HashMap::with_capacity(12);
         params.insert("app", package_name);
-        params.insert("X-subtype", sender_id);
         params.insert("device", &android_id);
         params.insert("sender", sender_id);
+
+        // GCM version (from GMS source)
+        params.insert("gcm_ver", "254730035");
+        params.insert("plat", "0");
+        params.insert("app_ver", "1");
+        params.insert("target_ver", "33");
+
+        // Add Firebase app ID if provided
+        let firebase_app_id_str;
+        if let Some(app_id) = firebase_app_id {
+            firebase_app_id_str = app_id.to_string();
+            params.insert("gmp_app_id", &firebase_app_id_str);
+        }
+
+        // Add cert if provided (must be lowercase hex!)
+        let cert_lower;
+        if let Some(cert) = cert_sha1 {
+            cert_lower = cert.to_lowercase();
+            params.insert("cert", &cert_lower);
+        }
 
         const API_NAME: &str = "GCM registration";
         let result = http

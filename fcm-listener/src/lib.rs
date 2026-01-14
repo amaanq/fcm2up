@@ -56,6 +56,9 @@ pub struct FcmCredentials {
     pub project_id: String,
     /// Android package name, e.g., "com.github.android"
     pub package_name: String,
+    /// SHA1 of the app's signing certificate (uppercase hex, no colons), optional
+    #[serde(default)]
+    pub cert_sha1: Option<String>,
 }
 
 /// A registered FCM client that can receive messages
@@ -83,7 +86,13 @@ impl Registration {
         // Step 2: Register with GCM to get a token
         tracing::debug!("Registering with GCM...");
         let gcm_token = gcm_session
-            .register(http, &creds.sender_id, &creds.package_name)
+            .register(
+                http,
+                &creds.sender_id,
+                &creds.package_name,
+                Some(&creds.app_id),
+                creds.cert_sha1.as_deref(),
+            )
             .await?;
         tracing::info!(
             "GCM registration complete: token={}...",

@@ -68,6 +68,7 @@ impl FcmManager {
             app_id: firebase_app_id,
             project_id: firebase_project_id,
             package_name: app_id.clone(),
+            cert_sha1: None, // TODO: Extract from APK if needed
         };
 
         // Register with FCM
