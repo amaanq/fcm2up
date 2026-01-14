@@ -9,9 +9,8 @@ license = "MIT"
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 
-# FCM listener
-fcm-push-listener = "4"
-uuid = { version = "1", features = ["v4"] }
+# FCM listener (local crate)
+fcm-listener = { path = "../fcm-listener" }
 
 # HTTP server & client
 axum = "0.7"

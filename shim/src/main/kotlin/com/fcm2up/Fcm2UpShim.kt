@@ -37,8 +37,14 @@ object Fcm2UpShim {
     private const val KEY_FIREBASE_API_KEY = "firebase_api_key"
     private const val KEY_FCM_HANDLER_CLASS = "fcm_handler_class"
     private const val KEY_FCM_HANDLER_METHOD = "fcm_handler_method"
+    private const val KEY_FCM_SERVICE_CLASS = "fcm_service_class"
 
     private const val ACTION_REGISTER = "org.unifiedpush.android.connector.REGISTER"
+
+    // Re-entry guard: set to true when WE are triggering onNewToken
+    // This prevents infinite loops when our injected hook fires
+    @Volatile
+    private var isInjectingToken = false
     private const val ACTION_UNREGISTER = "org.unifiedpush.android.connector.UNREGISTER"
 
     private const val DEFAULT_DISTRIBUTOR = "io.heckel.ntfy"
@@ -53,7 +59,7 @@ object Fcm2UpShim {
     }
 
     /**
-     * Configure the shim with Firebase credentials.
+     * Configure the shim with Firebase credentials and FCM service class.
      */
     @JvmStatic
     fun configure(
@@ -62,7 +68,8 @@ object Fcm2UpShim {
         distributor: String,
         firebaseAppId: String?,
         firebaseProjectId: String?,
-        firebaseApiKey: String?
+        firebaseApiKey: String?,
+        fcmServiceClass: String?
     ) {
         val prefs = getPrefs(context)
         val editor = prefs.edit()
@@ -71,9 +78,10 @@ object Fcm2UpShim {
         if (notEmpty(firebaseAppId)) editor.putString(KEY_FIREBASE_APP_ID, firebaseAppId)
         if (notEmpty(firebaseProjectId)) editor.putString(KEY_FIREBASE_PROJECT_ID, firebaseProjectId)
         if (notEmpty(firebaseApiKey)) editor.putString(KEY_FIREBASE_API_KEY, firebaseApiKey)
+        if (notEmpty(fcmServiceClass)) editor.putString(KEY_FCM_SERVICE_CLASS, fcmServiceClass)
         editor.apply()
 
-        Log.i(TAG, "Configured: bridge=$bridgeUrl, distributor=$distributor, firebase_app_id=${preview(firebaseAppId)}")
+        Log.i(TAG, "Configured: bridge=$bridgeUrl, distributor=$distributor, firebase_app_id=${preview(firebaseAppId)}, fcm_service=${preview(fcmServiceClass)}")
     }
 
     /**
@@ -81,6 +89,12 @@ object Fcm2UpShim {
      */
     @JvmStatic
     fun onToken(context: Context, fcmToken: String) {
+        // Check re-entry guard: if WE triggered this call, ignore it
+        if (isInjectingToken) {
+            Log.d(TAG, "Ignoring re-entrant onToken call (we triggered this)")
+            return
+        }
+
         Log.d(TAG, "FCM token received from Google: ${preview(fcmToken)}")
         getPrefs(context).edit().putString(KEY_FCM_TOKEN, fcmToken).apply()
 
@@ -260,6 +274,10 @@ object Fcm2UpShim {
                         if (notEmpty(bridgeFcmToken)) {
                             prefs.edit().putString(KEY_BRIDGE_FCM_TOKEN, bridgeFcmToken).apply()
                             Log.i(TAG, "Got bridge FCM token: ${preview(bridgeFcmToken)}")
+
+                            // CRITICAL: Trigger the app's onNewToken with the bridge's token
+                            // This makes the app send the bridge's token to its backend
+                            triggerAppOnNewToken(context, bridgeFcmToken)
                         }
                         Log.i(TAG, "Registered with bridge: ${response.optString("message", "success")}")
                     } catch (e: Exception) {
@@ -337,6 +355,59 @@ object Fcm2UpShim {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to forward to FCM handler", e)
+        }
+    }
+
+    /**
+     * Trigger the app's onNewToken callback with the bridge's token.
+     * This makes the app send the bridge's token to its backend.
+     */
+    private fun triggerAppOnNewToken(context: Context, bridgeToken: String) {
+        val prefs = getPrefs(context)
+        val fcmServiceClass = prefs.getString(KEY_FCM_SERVICE_CLASS, null)
+
+        if (fcmServiceClass == null || fcmServiceClass.length == 0) {
+            Log.w(TAG, "No FCM service class configured, cannot inject bridge token")
+            return
+        }
+
+        Log.i(TAG, "Triggering app's onNewToken with bridge token: ${preview(bridgeToken)}")
+
+        try {
+            val clazz = Class.forName(fcmServiceClass)
+
+            // Find onNewToken(String) method
+            val method = clazz.getDeclaredMethod("onNewToken", String::class.java)
+            method.isAccessible = true
+
+            // Create an instance of the service
+            val constructor = clazz.getDeclaredConstructor()
+            constructor.isAccessible = true
+            val instance = constructor.newInstance()
+
+            // CRITICAL: Attach context to the service instance!
+            // FirebaseMessagingService extends Service extends ContextWrapper.
+            // Without this, the service can't access application context and will NPE.
+            if (instance is android.content.ContextWrapper) {
+                val attachMethod = android.content.ContextWrapper::class.java
+                    .getDeclaredMethod("attachBaseContext", Context::class.java)
+                attachMethod.isAccessible = true
+                attachMethod.invoke(instance, context.applicationContext)
+                Log.d(TAG, "Attached context to FCM service instance")
+            }
+
+            // Set the re-entry guard BEFORE calling onNewToken
+            // This prevents our hook from processing this call
+            isInjectingToken = true
+            try {
+                method.invoke(instance, bridgeToken)
+                Log.i(TAG, "Successfully injected bridge token into app's onNewToken")
+            } finally {
+                isInjectingToken = false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to trigger app's onNewToken", e)
+            isInjectingToken = false
         }
     }
 

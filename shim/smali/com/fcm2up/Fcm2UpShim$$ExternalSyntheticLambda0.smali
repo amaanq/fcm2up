@@ -21,10 +21,12 @@
 
 .field public final synthetic f$6:Landroid/content/SharedPreferences;
 
+.field public final synthetic f$7:Landroid/content/Context;
+
 
 # direct methods
-.method public synthetic constructor <init>(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Landroid/content/SharedPreferences;)V
-    .registers 8
+.method public synthetic constructor <init>(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Landroid/content/SharedPreferences;Landroid/content/Context;)V
+    .registers 9
 
     .line 0
     invoke-direct {p0}, Ljava/lang/Object;-><init>()V
@@ -43,13 +45,15 @@
 
     iput-object p7, p0, Lcom/fcm2up/Fcm2UpShim$$ExternalSyntheticLambda0;->f$6:Landroid/content/SharedPreferences;
 
+    iput-object p8, p0, Lcom/fcm2up/Fcm2UpShim$$ExternalSyntheticLambda0;->f$7:Landroid/content/Context;
+
     return-void
 .end method
 
 
 # virtual methods
 .method public final run()V
-    .registers 8
+    .registers 9
 
     .line 0
     iget-object v0, p0, Lcom/fcm2up/Fcm2UpShim$$ExternalSyntheticLambda0;->f$0:Ljava/lang/String;
@@ -66,7 +70,9 @@
 
     iget-object v6, p0, Lcom/fcm2up/Fcm2UpShim$$ExternalSyntheticLambda0;->f$6:Landroid/content/SharedPreferences;
 
-    invoke-static/range {v0 .. v6}, Lcom/fcm2up/Fcm2UpShim;->$r8$lambda$GRR3VK7DKAKDuYl-9unEY9mpTXU(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Landroid/content/SharedPreferences;)V
+    iget-object v7, p0, Lcom/fcm2up/Fcm2UpShim$$ExternalSyntheticLambda0;->f$7:Landroid/content/Context;
+
+    invoke-static/range {v0 .. v7}, Lcom/fcm2up/Fcm2UpShim;->$r8$lambda$d9m2IwkPWpZ62gnkSPW50P5n4AA(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Landroid/content/SharedPreferences;Landroid/content/Context;)V
 
     return-void
 .end method

@@ -4,10 +4,11 @@
 
 use crate::db::Database;
 use anyhow::Result;
-use fcm_push_listener::{Message, MessageStream, Registration};
+use fcm_listener::{FcmCredentials, Message, MessageStream, Registration};
 use futures_util::StreamExt;
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
@@ -51,23 +52,33 @@ impl FcmManager {
             let _ = handle.stop_tx.send(()).await;
         }
 
+        // Extract sender_id from firebase_app_id
+        // Format: "1:<sender_id>:android:<hash>"
+        let sender_id = extract_sender_id(&firebase_app_id)?;
+
         info!(
-            "Registering with FCM for app: {} (firebase_app_id: {})",
-            app_id, firebase_app_id
+            "Registering with FCM for app: {} (sender_id: {}, package: {})",
+            app_id, sender_id, app_id
         );
 
-        // Register with FCM
-        let registration = fcm_push_listener::register(
-            &self.http_client,
-            &firebase_app_id,
-            &firebase_project_id,
-            &firebase_api_key,
-            None, // No VAPID key
-        )
-        .await?;
+        // Build FCM credentials
+        let credentials = FcmCredentials {
+            sender_id: sender_id.clone(),
+            api_key: firebase_api_key,
+            app_id: firebase_app_id,
+            project_id: firebase_project_id,
+            package_name: app_id.clone(),
+        };
 
-        let fcm_token = registration.fcm_token.clone();
-        info!("Got FCM token for {}: {}...", app_id, &fcm_token[..20.min(fcm_token.len())]);
+        // Register with FCM
+        let registration = Registration::register(&self.http_client, &credentials).await?;
+
+        let fcm_token = registration.fcm_token().to_string();
+        info!(
+            "Got FCM token for {}: {}...",
+            app_id,
+            &fcm_token[..20.min(fcm_token.len())]
+        );
 
         // Save registration for reconnection
         if let Ok(reg_json) = serde_json::to_string(&registration) {
@@ -111,6 +122,17 @@ impl FcmManager {
     }
 }
 
+/// Extract sender_id from Firebase app ID
+/// Format: "1:<sender_id>:android:<hash>" or "1:<sender_id>:web:<hash>"
+fn extract_sender_id(firebase_app_id: &str) -> Result<String> {
+    let parts: Vec<&str> = firebase_app_id.split(':').collect();
+    if parts.len() >= 2 {
+        Ok(parts[1].to_string())
+    } else {
+        anyhow::bail!("Invalid firebase_app_id format: {}", firebase_app_id)
+    }
+}
+
 async fn run_listener(
     app_id: String,
     registration: Registration,
@@ -130,18 +152,8 @@ async fn run_listener(
             break;
         }
 
-        // Checkin to get a CheckedSession
-        let checked_session = match registration.gcm.checkin(&http_client).await {
-            Ok(session) => session,
-            Err(e) => {
-                error!("FCM checkin failed for {}: {}", app_id, e);
-                tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
-                continue;
-            }
-        };
-
-        // Create connection to mtalk.google.com
-        let connection = match checked_session.new_connection(persistent_ids.clone()).await {
+        // Connect to mtalk.google.com
+        let connection = match registration.gcm_session.connect(persistent_ids.clone()).await {
             Ok(conn) => conn,
             Err(e) => {
                 error!("FCM connection failed for {}: {}", app_id, e);
@@ -152,8 +164,8 @@ async fn run_listener(
 
         info!("FCM connection established for {}", app_id);
 
-        // Wrap connection in MessageStream
-        let mut stream = MessageStream::wrap(connection, &registration.keys);
+        // Wrap connection in MessageStream (no encryption keys needed for Android FCM)
+        let mut stream = MessageStream::new(connection.0);
 
         // Listen for messages
         loop {
@@ -166,11 +178,13 @@ async fn run_listener(
                 msg = stream.next() => {
                     match msg {
                         Some(Ok(Message::Data(data))) => {
+                            let payload_len = data.raw_data.as_ref().map(|d| d.len()).unwrap_or(0);
                             info!(
-                                "Received FCM message for {}: {} bytes, persistent_id: {:?}",
+                                "Received FCM message for {}: {} bytes, persistent_id: {:?}, from: {:?}",
                                 app_id,
-                                data.body.len(),
-                                data.persistent_id
+                                payload_len,
+                                data.persistent_id,
+                                data.from
                             );
 
                             // Track persistent ID
@@ -185,15 +199,37 @@ async fn run_listener(
                             }
 
                             // Forward to UnifiedPush endpoint
-                            if let Err(e) = forward_to_up(&endpoint, &data.body, &http_client).await {
-                                error!("Failed to forward to UP for {}: {}", app_id, e);
+                            // For Android FCM, the payload might be in raw_data or app_data
+                            let body = if let Some(raw) = &data.raw_data {
+                                raw.clone()
                             } else {
-                                info!("Forwarded message to UP endpoint for {}", app_id);
+                                // Serialize app_data as JSON if no raw_data
+                                let app_data: HashMap<&str, &str> = data
+                                    .app_data
+                                    .iter()
+                                    .map(|(k, v)| (k.as_str(), v.as_str()))
+                                    .collect();
+                                serde_json::to_vec(&app_data).unwrap_or_default()
+                            };
+
+                            if !body.is_empty() {
+                                if let Err(e) = forward_to_up(&endpoint, &body, &http_client).await {
+                                    error!("Failed to forward to UP for {}: {}", app_id, e);
+                                } else {
+                                    info!("Forwarded message to UP endpoint for {}", app_id);
+                                }
+                            } else {
+                                warn!("Empty payload in FCM message for {}", app_id);
                             }
                         }
 
                         Some(Ok(Message::HeartbeatPing)) => {
-                            // Heartbeat ping - the library handles ack automatically
+                            // Send heartbeat ack
+                            let ack = fcm_listener::new_heartbeat_ack();
+                            if let Err(e) = stream.write_all(&ack).await {
+                                error!("Failed to send heartbeat ack for {}: {}", app_id, e);
+                                break; // Reconnect
+                            }
                         }
 
                         Some(Ok(Message::Other(tag, _))) => {
