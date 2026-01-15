@@ -33,6 +33,10 @@ pub struct GcmSession {
 
     #[serde_as(as = "serde_with::DisplayFromStr")]
     pub security_token: u64,
+
+    /// version_info from checkin response - used as 'info' param in registration
+    #[serde(default)]
+    pub version_info: Option<String>,
 }
 
 /// Token received from GCM registration
@@ -198,9 +202,16 @@ impl GcmSession {
             "response is missing security token",
         )?;
 
+        // Extract version_info for use in registration
+        let version_info = response.version_info;
+        if let Some(ref vi) = version_info {
+            tracing::debug!("GCM checkin version_info: {}", vi);
+        }
+
         Ok(Self {
             android_id,
             security_token,
+            version_info,
         })
     }
 
@@ -245,12 +256,15 @@ impl GcmSession {
         let app_ver_str = app_version.unwrap_or(1).to_string();
         let target_ver_str = target_sdk.unwrap_or(34).to_string();
 
-        // Build registration parameters matching microG's RegisterRequest.java
+        // Build registration parameters matching GMS bvaz.java
         let mut params = std::collections::HashMap::with_capacity(12);
         params.insert("app", package_name);
         params.insert("device", &android_id);
         params.insert("sender", sender_id);
-        params.insert("info", "");
+        // GMS bumq.d(context) returns CheckinService_versionInfo from SharedPreferences
+        // This is the version_info field from the checkin response
+        let info_str = self.version_info.as_deref().unwrap_or("");
+        params.insert("info", info_str);
         params.insert("app_ver", &app_ver_str);
         params.insert("target_ver", &target_ver_str);
         params.insert("gcm_ver", "254730035"); // GMS version
