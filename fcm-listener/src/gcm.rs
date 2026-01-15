@@ -20,8 +20,8 @@ fn require_some<T>(value: Option<T>, reason: &'static str) -> Result<T, Error> {
 }
 
 const CHECKIN_URL: &str = "https://android.clients.google.com/checkin";
-// GMS uses android.apis.google.com (iacp.java:287)
-const REGISTER_URL: &str = "https://android.apis.google.com/c2dm/register3";
+// microG uses android.clients.google.com (known working on devices)
+const REGISTER_URL: &str = "https://android.clients.google.com/c2dm/register3";
 
 // Normal JSON serialization will lose precision and change the number, so we must
 // force the i64/u64 to serialize to string.
@@ -246,9 +246,8 @@ impl GcmSession {
         target_sdk: Option<i32>,
     ) -> Result<GcmToken, Error> {
         let android_id = self.android_id.to_string();
-        // GMS bvaz.java:312 - a.l(e2, c, "AidLogin ", ":") where e2=security_token, c=android_id
-        // This constructs: "AidLogin <security_token>:<android_id>"
-        let auth_header = format!("AidLogin {}:{}", &self.security_token, &android_id);
+        // microG RegisterRequest.java:71 uses android_id:security_token (known working on devices)
+        let auth_header = format!("AidLogin {}:{}", &android_id, &self.security_token);
         // User-Agent matching microG: Android-GCM/1.5 (device buildId)
         let user_agent = "Android-GCM/1.5 (redfin AP2A.240805.005)";
 
