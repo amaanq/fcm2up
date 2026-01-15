@@ -45,6 +45,9 @@ impl FcmManager {
         firebase_project_id: String,
         firebase_api_key: String,
         cert_sha1: Option<String>,
+        app_version: Option<i32>,
+        app_version_name: Option<String>,
+        target_sdk: Option<i32>,
         endpoint: String,
         db: Arc<Database>,
     ) -> Result<String> {
@@ -73,10 +76,9 @@ impl FcmManager {
             project_id: firebase_project_id,
             package_name: app_id.clone(),
             cert_sha1,
-            // TODO: These could be passed from the shim for more accurate registration
-            app_version: None,
-            app_version_name: None,
-            target_sdk: None,
+            app_version,
+            app_version_name,
+            target_sdk,
         };
 
         // Register with FCM

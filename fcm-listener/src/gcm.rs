@@ -20,8 +20,7 @@ fn require_some<T>(value: Option<T>, reason: &'static str) -> Result<T, Error> {
 }
 
 const CHECKIN_URL: &str = "https://android.clients.google.com/checkin";
-// GMS uses android.apis.google.com (iacp.java:287), not android.clients.google.com
-// The old URL returns DEPRECATED_ENDPOINT
+// GMS uses android.apis.google.com (iacp.java:287)
 const REGISTER_URL: &str = "https://android.apis.google.com/c2dm/register3";
 
 // Normal JSON serialization will lose precision and change the number, so we must
@@ -171,9 +170,9 @@ impl GcmSession {
         let decoded_bytes = if is_gzip {
             let mut decoder = GzDecoder::new(&response_bytes[..]);
             let mut decompressed = Vec::new();
-            decoder
-                .read_to_end(&mut decompressed)
-                .map_err(|_| Error::DependencyFailure(API_NAME, "failed to decompress gzip response"))?;
+            decoder.read_to_end(&mut decompressed).map_err(|_| {
+                Error::DependencyFailure(API_NAME, "failed to decompress gzip response")
+            })?;
             tracing::debug!(
                 "GCM checkin: decompressed {} bytes -> {} bytes",
                 response_bytes.len(),
@@ -236,9 +235,9 @@ impl GcmSession {
         target_sdk: Option<i32>,
     ) -> Result<GcmToken, Error> {
         let android_id = self.android_id.to_string();
-        // microG RegisterRequest.java:71 - AidLogin <android_id>:<security_token>
-        // This is the known-working format used by microG on real devices
-        let auth_header = format!("AidLogin {}:{}", &android_id, &self.security_token);
+        // GMS bvaz.java:312 - a.l(e2, c, "AidLogin ", ":") where e2=security_token, c=android_id
+        // This constructs: "AidLogin <security_token>:<android_id>"
+        let auth_header = format!("AidLogin {}:{}", &self.security_token, &android_id);
         // User-Agent matching microG: Android-GCM/1.5 (device buildId)
         let user_agent = "Android-GCM/1.5 (redfin AP2A.240805.005)";
 
@@ -282,6 +281,8 @@ impl GcmSession {
             .header("app", package_name)
             .header("gcm_ver", "254730035")
             .header("app_ver", &app_ver_str)
+            // GMS bvaz.java:319-320 adds request_type header
+            .header("request_type", "1") // 1 = register
             .send()
             .await
             .map_err(|e| Error::Request(API_NAME, e))?;

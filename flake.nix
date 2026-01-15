@@ -258,6 +258,11 @@
               echo "  nix build .#fcm2up-patcher  - Build APK patcher"
               echo "  nix build .#fcm2up-shim     - Build shim DEX (with kotlin patching)"
               echo ""
+              echo "Patch GitHub APK:"
+              echo "  nix run .#patch-github         - Build shim + patch APK"
+              echo "  nix run .#patch-github-install - Build, patch, and install"
+              echo "  BRIDGE_URL=... nix run .#patch-github  - Override bridge URL"
+              echo ""
               echo "Update shim deps (after changing shim/build.gradle.kts):"
               echo "  nix run .#update-shim-deps"
               echo ""
@@ -270,11 +275,129 @@
       );
 
       # App to update shim Gradle dependencies
-      apps = forAllSystems (system: {
-        update-shim-deps = {
-          type = "app";
-          program = "${self.packages.${system}.fcm2up-shim.mitmCache.updateScript}";
-        };
-      });
+      apps = forAllSystems (
+        system:
+        let
+          pkgs = import nixpkgs {
+            inherit system;
+            config = {
+              allowUnfree = true;
+              android_sdk.accept_license = true;
+            };
+          };
+
+          androidComposition = pkgs.androidenv.composeAndroidPackages {
+            platformVersions = [ "36" ];
+            buildToolsVersions = [ "36.0.0" ];
+            includeNDK = false;
+          };
+
+          # Fetch smali/baksmali JARs
+          smaliVersion = "2.5.2";
+          baksmaliJar = pkgs.fetchurl {
+            url = "https://bitbucket.org/JesusFreke/smali/downloads/baksmali-${smaliVersion}.jar";
+            sha256 = "sha256-0xFiSMzk+C7Fox63+V7nXa/0Ld9u7Qq1c5c9xT+60uU=";
+          };
+          smaliJar = pkgs.fetchurl {
+            url = "https://bitbucket.org/JesusFreke/smali/downloads/smali-${smaliVersion}.jar";
+            sha256 = "sha256-lUQplXixb3cdiqjq7+DTcYygNHjBbzw1by/PE2a/sRY=";
+          };
+
+          # Wrapper scripts for baksmali/smali
+          baksmaliWrapper = pkgs.writeShellScriptBin "baksmali" ''
+            exec ${pkgs.jdk17}/bin/java -jar ${baksmaliJar} "$@"
+          '';
+          smaliWrapper = pkgs.writeShellScriptBin "smali" ''
+            exec ${pkgs.jdk17}/bin/java -jar ${smaliJar} "$@"
+          '';
+
+          # Script to patch GitHub APK
+          patchGithubScript = pkgs.writeShellScript "patch-github" ''
+            set -euo pipefail
+
+            BRIDGE_URL="''${BRIDGE_URL:-https://fcm-bridge.amaanq.com}"
+            DISTRIBUTOR="''${DISTRIBUTOR:-io.heckel.ntfy}"
+            GH_DIR="$HOME/projects/gh-android"
+            INPUT_APK="$GH_DIR/apks/base.apk"
+            OUTPUT_APK="$GH_DIR/github-fcm2up.apk"
+
+            if [ ! -f "$INPUT_APK" ]; then
+              echo "Error: Input APK not found at $INPUT_APK"
+              echo "Pull it from your device with:"
+              echo "  adb shell pm path com.github.android"
+              echo "  adb pull <path>/base.apk $GH_DIR/apks/"
+              exit 1
+            fi
+
+            echo "Building shim..."
+            SHIM_DEX=$(nix build .#fcm2up-shim --no-link --print-out-paths)/fcm2up-shim.dex
+
+            echo "Building patcher..."
+            PATCHER=$(nix build .#fcm2up-patcher --no-link --print-out-paths)/bin/fcm2up-patcher
+
+            echo "Patching APK..."
+            echo "  Input:  $INPUT_APK"
+            echo "  Output: $OUTPUT_APK"
+            echo "  Bridge: $BRIDGE_URL"
+            echo "  Distributor: $DISTRIBUTOR"
+
+            # Set up environment for apksigner, apktool, baksmali, smali
+            export PATH="${androidComposition.androidsdk}/libexec/android-sdk/build-tools/36.0.0:${pkgs.apktool}/bin:${baksmaliWrapper}/bin:${smaliWrapper}/bin:$PATH"
+
+            "$PATCHER" patch \
+              -i "$INPUT_APK" \
+              -o "$OUTPUT_APK" \
+              -b "$BRIDGE_URL" \
+              -d "$DISTRIBUTOR" \
+              --shim-dex "$SHIM_DEX"
+
+            echo ""
+            echo "Done! Patched APK: $OUTPUT_APK"
+            echo ""
+            echo "To install:"
+            echo "  adb install -r $OUTPUT_APK"
+            echo "Or for split APKs:"
+            echo "  adb install-multiple $OUTPUT_APK $GH_DIR/apks/split_config.arm64_v8a.apk $GH_DIR/apks/split_config.xhdpi.apk"
+          '';
+
+          # Script to patch and install
+          patchGithubInstallScript = pkgs.writeShellScript "patch-github-install" ''
+            set -euo pipefail
+
+            GH_DIR="$HOME/projects/gh-android"
+
+            # Run the patch script
+            ${patchGithubScript}
+
+            echo "Installing..."
+            ${pkgs.android-tools}/bin/adb install-multiple \
+              "$GH_DIR/github-fcm2up.apk" \
+              "$GH_DIR/apks/split_config.arm64_v8a.apk" \
+              "$GH_DIR/apks/split_config.xhdpi.apk"
+
+            echo ""
+            echo "Installed! Check logs with:"
+            echo "  adb logcat -s 'FCM2UP:*' 'Fcm2UpShim:*'"
+          '';
+        in
+        {
+          update-shim-deps = {
+            type = "app";
+            program = "${self.packages.${system}.fcm2up-shim.mitmCache.updateScript}";
+          };
+
+          # Patch GitHub APK (doesn't install)
+          patch-github = {
+            type = "app";
+            program = "${patchGithubScript}";
+          };
+
+          # Patch and install GitHub APK
+          patch-github-install = {
+            type = "app";
+            program = "${patchGithubInstallScript}";
+          };
+        }
+      );
     };
 }

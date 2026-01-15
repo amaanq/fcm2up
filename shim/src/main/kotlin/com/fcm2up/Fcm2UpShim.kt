@@ -239,6 +239,26 @@ object Fcm2UpShim {
 
         val packageName = context.packageName
 
+        // Get app version info - computed upfront as final vals to avoid Ref$ObjectRef
+        val packageInfo = try { context.packageManager.getPackageInfo(packageName, 0) } catch (e: Exception) { null }
+        val applicationInfo = try { context.packageManager.getApplicationInfo(packageName, 0) } catch (e: Exception) { null }
+
+        val appVersion: Int? = if (packageInfo != null) {
+            if (Build.VERSION.SDK_INT >= 28) {
+                packageInfo.longVersionCode.toInt()
+            } else {
+                @Suppress("DEPRECATION")
+                packageInfo.versionCode
+            }
+        } else null
+
+        val appVersionName: String? = packageInfo?.versionName
+        val targetSdk: Int? = applicationInfo?.targetSdkVersion
+
+        if (appVersion != null) {
+            Log.d(TAG, "App info: version=$appVersion, versionName=$appVersionName, targetSdk=$targetSdk")
+        }
+
         executor.execute {
             try {
                 val url = URL("$bridgeUrl/register")
@@ -256,6 +276,9 @@ object Fcm2UpShim {
                 if (firebaseProjectId != null) jsonObj.put("firebase_project_id", firebaseProjectId)
                 if (firebaseApiKey != null) jsonObj.put("firebase_api_key", firebaseApiKey)
                 if (certSha1 != null) jsonObj.put("cert_sha1", certSha1)
+                if (appVersion != null) jsonObj.put("app_version", appVersion)
+                if (appVersionName != null) jsonObj.put("app_version_name", appVersionName)
+                if (targetSdk != null) jsonObj.put("target_sdk", targetSdk)
 
                 val writer = OutputStreamWriter(conn.outputStream)
                 writer.write(jsonObj.toString())
