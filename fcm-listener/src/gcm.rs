@@ -20,7 +20,9 @@ fn require_some<T>(value: Option<T>, reason: &'static str) -> Result<T, Error> {
 }
 
 const CHECKIN_URL: &str = "https://android.clients.google.com/checkin";
-const REGISTER_URL: &str = "https://android.clients.google.com/c2dm/register3";
+// GMS uses android.apis.google.com (iacp.java:287), not android.clients.google.com
+// The old URL returns DEPRECATED_ENDPOINT
+const REGISTER_URL: &str = "https://android.apis.google.com/c2dm/register3";
 
 // Normal JSON serialization will lose precision and change the number, so we must
 // force the i64/u64 to serialize to string.
