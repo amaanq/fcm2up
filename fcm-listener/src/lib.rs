@@ -56,9 +56,18 @@ pub struct FcmCredentials {
     pub project_id: String,
     /// Android package name, e.g., "com.github.android"
     pub package_name: String,
-    /// SHA1 of the app's signing certificate (uppercase hex, no colons), optional
+    /// SHA1 of the app's signing certificate (lowercase hex, no colons), optional
     #[serde(default)]
     pub cert_sha1: Option<String>,
+    /// App version code (versionCode from APK), optional
+    #[serde(default)]
+    pub app_version: Option<i32>,
+    /// App version name (versionName from APK), sent as X-app_ver_name, optional
+    #[serde(default)]
+    pub app_version_name: Option<String>,
+    /// Target SDK version from APK, optional
+    #[serde(default)]
+    pub target_sdk: Option<i32>,
 }
 
 /// A registered FCM client that can receive messages
@@ -93,8 +102,10 @@ impl Registration {
                 http,
                 &creds.sender_id,
                 &creds.package_name,
-                Some(&creds.app_id),
                 creds.cert_sha1.as_deref(),
+                creds.app_version,
+                creds.app_version_name.as_deref(),
+                creds.target_sdk,
             )
             .await?;
         tracing::info!(

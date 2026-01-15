@@ -73,6 +73,10 @@ impl FcmManager {
             project_id: firebase_project_id,
             package_name: app_id.clone(),
             cert_sha1,
+            // TODO: These could be passed from the shim for more accurate registration
+            app_version: None,
+            app_version_name: None,
+            target_sdk: None,
         };
 
         // Register with FCM

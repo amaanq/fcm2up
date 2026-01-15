@@ -96,6 +96,16 @@ message AndroidBuildProto {
   optional bool ota_installed = 14;
 }
 
+// Checkin event for logging (matches GMS axdz class and microG Event)
+message AndroidCheckinEvent {
+  // Event tag - "event_log_start" for first checkin, "system_update" for re-checkin
+  optional string tag = 1;
+  // Event value - null for first checkin, "1536,0,-1,NULL" for re-checkin
+  optional string value = 2;
+  // Timestamp in milliseconds
+  optional int64 time_msec = 3;
+}
+
 // Information sent by the device in a "checkin" request.
 message AndroidCheckinProto {
   // Android build info - required for Android device checkins
@@ -103,6 +113,10 @@ message AndroidCheckinProto {
 
   // Miliseconds since the Unix epoch of the device's last successful checkin.
   optional int64 last_checkin_msec = 2;
+
+  // Events for this checkin (e.g., "event_log_start" on first checkin)
+  // Both GMS (axdv.e field) and microG have this field at proto tag 3
+  repeated AndroidCheckinEvent event = 3;
 
   // The current MCC+MNC of the mobile device's current cell.
   optional string cell_operator = 6;

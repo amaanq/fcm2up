@@ -605,6 +605,7 @@ name = "fcm-listener"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "flate2",
  "pin-project-lite",
  "prost",
  "prost-build",

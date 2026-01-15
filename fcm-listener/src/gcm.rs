@@ -3,9 +3,13 @@ pub mod contract {
 }
 
 use crate::Error;
+use flate2::read::GzDecoder;
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use prost::bytes::BufMut;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
+use std::io::{Read, Write};
 use tokio_rustls::rustls::pki_types::ServerName;
 
 fn require_some<T>(value: Option<T>, reason: &'static str) -> Result<T, Error> {
@@ -43,6 +47,30 @@ impl GcmSession {
         security_token: Option<u64>,
     ) -> Result<Self, Error> {
         use prost::Message;
+
+        // Current timestamp for event
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+
+        // Build event list - microG sends "event_log_start" on first checkin, "system_update" on re-checkin
+        // GMS has this structure (axdz class) but may not always populate it
+        let event = if android_id.is_none() {
+            // First checkin - send "event_log_start"
+            vec![contract::AndroidCheckinEvent {
+                tag: Some("event_log_start".into()),
+                value: None,
+                time_msec: Some(now_ms),
+            }]
+        } else {
+            // Re-checkin - send "system_update"
+            vec![contract::AndroidCheckinEvent {
+                tag: Some("system_update".into()),
+                value: Some("1536,0,-1,NULL".into()),
+                time_msec: Some(now_ms),
+            }]
+        };
 
         // Use Android device type with proper Android build info
         // This mimics what a real Android device (Pixel 5) would send
@@ -83,6 +111,7 @@ impl GcmSession {
                     ..Default::default()
                 }),
                 last_checkin_msec: Some(0),
+                event, // Add the event list (microG CheckinClient.java:108-112)
                 roaming: Some("WIFI::".into()),
                 user_number: Some(0),
                 ..Default::default()
@@ -95,20 +124,65 @@ impl GcmSession {
         // User-Agent matching microG's CheckinClient.java
         let user_agent = "Android-Checkin/2.0 (redfin AP2A.240805.005); gzip";
 
+        // Gzip compress the request body (both GMS and microG do this)
+        let proto_bytes = request.encode_to_vec();
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        encoder
+            .write_all(&proto_bytes)
+            .map_err(|_| Error::DependencyFailure(API_NAME, "failed to gzip compress request"))?;
+        let compressed_body = encoder
+            .finish()
+            .map_err(|_| Error::DependencyFailure(API_NAME, "failed to finish gzip compression"))?;
+
+        tracing::debug!(
+            "GCM checkin: compressed {} bytes -> {} bytes",
+            proto_bytes.len(),
+            compressed_body.len()
+        );
+
         let response = http
             .post(CHECKIN_URL)
-            .body(request.encode_to_vec())
-            .header(reqwest::header::CONTENT_TYPE, "application/x-protobuf")
+            .body(compressed_body)
+            // Content-Type must be "application/x-protobuffer" (with 'buffer' suffix)
+            // Both GMS (awzn.java:92) and microG use this exact value
+            .header(reqwest::header::CONTENT_TYPE, "application/x-protobuffer")
+            // GMS and microG both send gzip-compressed bodies
+            .header(reqwest::header::CONTENT_ENCODING, "gzip")
+            .header(reqwest::header::ACCEPT_ENCODING, "gzip")
             .header(reqwest::header::USER_AGENT, user_agent)
             .send()
             .await
             .map_err(|e| Error::Request(API_NAME, e))?;
 
+        // Check if response is gzip-encoded and decompress if needed
+        let is_gzip = response
+            .headers()
+            .get(reqwest::header::CONTENT_ENCODING)
+            .map(|v| v.to_str().unwrap_or("").contains("gzip"))
+            .unwrap_or(false);
+
         let response_bytes = response
             .bytes()
             .await
             .map_err(|e| Error::Response(API_NAME, e))?;
-        let response = contract::AndroidCheckinResponse::decode(response_bytes)
+
+        let decoded_bytes = if is_gzip {
+            let mut decoder = GzDecoder::new(&response_bytes[..]);
+            let mut decompressed = Vec::new();
+            decoder
+                .read_to_end(&mut decompressed)
+                .map_err(|_| Error::DependencyFailure(API_NAME, "failed to decompress gzip response"))?;
+            tracing::debug!(
+                "GCM checkin: decompressed {} bytes -> {} bytes",
+                response_bytes.len(),
+                decompressed.len()
+            );
+            decompressed
+        } else {
+            response_bytes.to_vec()
+        };
+
+        let response = contract::AndroidCheckinResponse::decode(&decoded_bytes[..])
             .map_err(|e| Error::ProtobufDecode("android checkin response", e))?;
 
         let android_id = require_some(response.android_id, "response is missing android id")?;
@@ -145,40 +219,52 @@ impl GcmSession {
     /// * `http` - HTTP client
     /// * `sender_id` - Firebase sender ID (project number), e.g., "890224420307"
     /// * `package_name` - Android package name, e.g., "com.github.android"
-    /// * `firebase_app_id` - Full Firebase app ID, e.g., "1:890224420307:android:835ea94c9a536bb0"
-    /// * `cert_sha1` - SHA1 of signing certificate (uppercase hex, no colons), or None
+    /// * `cert_sha1` - SHA1 of signing certificate (lowercase hex, no colons), or None
+    /// * `app_version` - App version code (versionCode from APK)
+    /// * `app_version_name` - App version name (versionName from APK), sent as X-app_ver_name
+    /// * `target_sdk` - Target SDK version from APK
     pub async fn register(
         &self,
         http: &reqwest::Client,
         sender_id: &str,
         package_name: &str,
-        firebase_app_id: Option<&str>,
         cert_sha1: Option<&str>,
+        app_version: Option<i32>,
+        app_version_name: Option<&str>,
+        target_sdk: Option<i32>,
     ) -> Result<GcmToken, Error> {
         let android_id = self.android_id.to_string();
-        // GMS bvaz.java:312 - AidLogin <security_token>:<android_id>
-        let auth_header = format!("AidLogin {}:{}", &self.security_token, &android_id);
+        // microG RegisterRequest.java:71 - AidLogin <android_id>:<security_token>
+        // This is the known-working format used by microG on real devices
+        let auth_header = format!("AidLogin {}:{}", &android_id, &self.security_token);
         // User-Agent matching microG: Android-GCM/1.5 (device buildId)
         let user_agent = "Android-GCM/1.5 (redfin AP2A.240805.005)";
 
-        // Build registration parameters matching microG's RegisterRequest.java EXACTLY
-        // Using REAL app values from GitHub APK (extracted via apktool)
-        let mut params = std::collections::HashMap::with_capacity(10);
+        // Use provided values or defaults
+        let app_ver_str = app_version.unwrap_or(1).to_string();
+        let target_ver_str = target_sdk.unwrap_or(34).to_string();
+
+        // Build registration parameters matching microG's RegisterRequest.java
+        let mut params = std::collections::HashMap::with_capacity(12);
         params.insert("app", package_name);
         params.insert("device", &android_id);
         params.insert("sender", sender_id);
         params.insert("info", "");
-        // GitHub's ACTUAL values - not fake ones!
-        params.insert("app_ver", "896");           // versionCode from apktool
-        params.insert("target_ver", "36");         // targetSdkVersion from apktool
-        params.insert("gcm_ver", "254730035");     // GMS version
-        params.insert("plat", "0");                // Platform (0 = Android)
+        params.insert("app_ver", &app_ver_str);
+        params.insert("target_ver", &target_ver_str);
+        params.insert("gcm_ver", "254730035"); // GMS version
+        params.insert("plat", "0"); // Platform (0 = Android)
 
-        // Cert is required - use GitHub's original signing cert
+        // Cert is required - must be lowercase SHA1 of original APK signing cert
         let cert_lower;
         if let Some(cert) = cert_sha1 {
             cert_lower = cert.to_lowercase();
             params.insert("cert", &cert_lower);
+        }
+
+        // microG sends app version name as X-app_ver_name (PushRegisterManager.java:80-81)
+        if let Some(ver_name) = app_version_name {
+            params.insert("X-app_ver_name", ver_name);
         }
 
         const API_NAME: &str = "GCM registration";
@@ -189,11 +275,11 @@ impl GcmSession {
         let result = http
             .post(REGISTER_URL)
             .form(&params)
-            .header(reqwest::header::AUTHORIZATION, auth_header)
+            .header(reqwest::header::AUTHORIZATION, &auth_header)
             .header(reqwest::header::USER_AGENT, user_agent)
             .header("app", package_name)
-            .header("gcm_ver", "254730035")  // GMS sends this as header
-            .header("app_ver", "896")         // GMS sends this as header
+            .header("gcm_ver", "254730035")
+            .header("app_ver", &app_ver_str)
             .send()
             .await
             .map_err(|e| Error::Request(API_NAME, e))?;
