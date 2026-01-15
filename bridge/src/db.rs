@@ -12,6 +12,10 @@ pub struct Registration {
     pub firebase_app_id: String,
     pub firebase_project_id: String,
     pub firebase_api_key: String,
+    pub cert_sha1: Option<String>,
+    pub app_version: Option<i32>,
+    pub app_version_name: Option<String>,
+    pub target_sdk: Option<i32>,
 }
 
 pub struct Database {
@@ -34,11 +38,20 @@ impl Database {
                     firebase_app_id TEXT NOT NULL,
                     firebase_project_id TEXT NOT NULL,
                     firebase_api_key TEXT NOT NULL,
+                    cert_sha1 TEXT,
+                    app_version INTEGER,
+                    app_version_name TEXT,
+                    target_sdk INTEGER,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
                 )",
                 [],
             )?;
+
+            // Add columns if they don't exist (for existing databases)
+            for col in ["cert_sha1 TEXT", "app_version INTEGER", "app_version_name TEXT", "target_sdk INTEGER"] {
+                let _ = conn.execute(&format!("ALTER TABLE registrations ADD COLUMN {}", col), []);
+            }
 
             // Store FCM session data for reconnection
             conn.execute(
@@ -64,15 +77,19 @@ impl Database {
             .call(move |conn| {
                 conn.execute(
                     "INSERT OR REPLACE INTO registrations
-                     (app_id, endpoint, fcm_token, firebase_app_id, firebase_project_id, firebase_api_key, updated_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, CURRENT_TIMESTAMP)",
+                     (app_id, endpoint, fcm_token, firebase_app_id, firebase_project_id, firebase_api_key, cert_sha1, app_version, app_version_name, target_sdk, updated_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, CURRENT_TIMESTAMP)",
                     params![
                         reg.app_id,
                         reg.endpoint,
                         reg.fcm_token,
                         reg.firebase_app_id,
                         reg.firebase_project_id,
-                        reg.firebase_api_key
+                        reg.firebase_api_key,
+                        reg.cert_sha1,
+                        reg.app_version,
+                        reg.app_version_name,
+                        reg.target_sdk
                     ],
                 )?;
                 Ok(())
@@ -88,7 +105,7 @@ impl Database {
             .conn
             .call(move |conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT app_id, endpoint, fcm_token, firebase_app_id, firebase_project_id, firebase_api_key
+                    "SELECT app_id, endpoint, fcm_token, firebase_app_id, firebase_project_id, firebase_api_key, cert_sha1, app_version, app_version_name, target_sdk
                      FROM registrations WHERE app_id = ?1",
                 )?;
 
@@ -100,6 +117,10 @@ impl Database {
                         firebase_app_id: row.get(3)?,
                         firebase_project_id: row.get(4)?,
                         firebase_api_key: row.get(5)?,
+                        cert_sha1: row.get(6)?,
+                        app_version: row.get(7)?,
+                        app_version_name: row.get(8)?,
+                        target_sdk: row.get(9)?,
                     })
                 });
 
@@ -176,7 +197,7 @@ impl Database {
             .conn
             .call(|conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT app_id, endpoint, fcm_token, firebase_app_id, firebase_project_id, firebase_api_key
+                    "SELECT app_id, endpoint, fcm_token, firebase_app_id, firebase_project_id, firebase_api_key, cert_sha1, app_version, app_version_name, target_sdk
                      FROM registrations",
                 )?;
 
@@ -188,6 +209,10 @@ impl Database {
                         firebase_app_id: row.get(3)?,
                         firebase_project_id: row.get(4)?,
                         firebase_api_key: row.get(5)?,
+                        cert_sha1: row.get(6)?,
+                        app_version: row.get(7)?,
+                        app_version_name: row.get(8)?,
+                        target_sdk: row.get(9)?,
                     })
                 })?;
 

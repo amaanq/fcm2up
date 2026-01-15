@@ -38,7 +38,7 @@ mod gcm;
 mod push;
 
 pub use error::Error;
-pub use gcm::{Connection, GcmSession, GcmToken};
+pub use gcm::{Connection, FirebaseConfig, FirebaseInstallation, GcmSession, GcmToken};
 pub use push::{new_heartbeat_ack, DataMessage, Message, MessageStream, MessageTag};
 
 use serde::{Deserialize, Serialize};
@@ -95,7 +95,29 @@ impl Registration {
         // Small delay between checkin and registration (microG has implicit delay)
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
-        // Step 2: Register with GCM to get a token
+        // Step 2: Register with Firebase Installations to get FID and auth token
+        // This is required for modern Firebase SDK (>= 20.1.1)
+        let firebase_config = FirebaseConfig {
+            project_id: creds.project_id.clone(),
+            api_key: creds.api_key.clone(),
+            app_id: creds.app_id.clone(),
+        };
+
+        let cert_sha1 = creds.cert_sha1.as_deref().unwrap_or("");
+        tracing::debug!("Registering with Firebase Installations...");
+        let firebase_installation = GcmSession::register_firebase_installation(
+            http,
+            &firebase_config,
+            &creds.package_name,
+            cert_sha1,
+        )
+        .await?;
+        tracing::info!(
+            "Firebase Installations complete: fid={}",
+            firebase_installation.fid
+        );
+
+        // Step 3: Register with GCM to get a token
         tracing::debug!("Registering with GCM...");
         let gcm_token = gcm_session
             .register(
@@ -106,6 +128,8 @@ impl Registration {
                 creds.app_version,
                 creds.app_version_name.as_deref(),
                 creds.target_sdk,
+                Some(&firebase_config),
+                Some(&firebase_installation),
             )
             .await?;
         tracing::info!(

@@ -13,7 +13,7 @@ tokio = { version = "1", features = ["full"] }
 fcm-listener = { path = "../fcm-listener" }
 
 # HTTP server & client
-axum = "0.7"
+axum = { version = "0.7", features = ["macros"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # Serialization

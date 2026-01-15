@@ -30,7 +30,10 @@ impl FcmManager {
     pub fn new() -> Self {
         Self {
             listeners: HashMap::new(),
-            http_client: reqwest::Client::new(),
+            http_client: reqwest::Client::builder()
+                .http1_only()
+                .build()
+                .expect("failed to build HTTP client"),
         }
     }
 

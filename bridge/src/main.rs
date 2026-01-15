@@ -165,6 +165,10 @@ async fn register(
         firebase_app_id: firebase_app_id.clone(),
         firebase_project_id: firebase_project_id.clone(),
         firebase_api_key: firebase_api_key.clone(),
+        cert_sha1: req.cert_sha1.clone(),
+        app_version: req.app_version,
+        app_version_name: req.app_version_name.clone(),
+        target_sdk: req.target_sdk,
     };
 
     if let Err(e) = state.db.save_registration(&registration).await {
@@ -256,10 +260,10 @@ async fn restore_registrations(state: AppState) -> anyhow::Result<()> {
                 reg.firebase_app_id,
                 reg.firebase_project_id,
                 reg.firebase_api_key,
-                None, // cert_sha1 not stored in db yet
-                None, // app_version not stored in db yet
-                None, // app_version_name not stored in db yet
-                None, // target_sdk not stored in db yet
+                reg.cert_sha1,
+                reg.app_version,
+                reg.app_version_name,
+                reg.target_sdk,
                 reg.endpoint,
                 db,
             )

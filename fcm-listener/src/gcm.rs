@@ -20,7 +20,7 @@ fn require_some<T>(value: Option<T>, reason: &'static str) -> Result<T, Error> {
 }
 
 const CHECKIN_URL: &str = "https://android.clients.google.com/checkin";
-// microG uses android.clients.google.com (known working on devices)
+// microG uses android.clients.google.com
 const REGISTER_URL: &str = "https://android.clients.google.com/c2dm/register3";
 
 // Normal JSON serialization will lose precision and change the number, so we must
@@ -33,16 +33,34 @@ pub struct GcmSession {
 
     #[serde_as(as = "serde_with::DisplayFromStr")]
     pub security_token: u64,
-
-    /// version_info from checkin response - used as 'info' param in registration
-    #[serde(default)]
-    pub version_info: Option<String>,
 }
 
 /// Token received from GCM registration
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GcmToken {
     pub token: String,
+}
+
+/// Firebase Installations credentials
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FirebaseInstallation {
+    /// Firebase Installation ID (FID)
+    pub fid: String,
+    /// Auth token (JWT) for FCM registration
+    pub auth_token: String,
+    /// Refresh token for obtaining new auth tokens
+    pub refresh_token: String,
+}
+
+/// Firebase app configuration needed for registration
+#[derive(Clone, Debug)]
+pub struct FirebaseConfig {
+    /// Firebase project ID (e.g., "github-mobile-cc45e")
+    pub project_id: String,
+    /// Firebase API key (from google-services.json)
+    pub api_key: String,
+    /// Firebase App ID (e.g., "1:890224420307:android:835ea94c9a536bb0")
+    pub app_id: String,
 }
 
 impl GcmSession {
@@ -174,9 +192,9 @@ impl GcmSession {
         let decoded_bytes = if is_gzip {
             let mut decoder = GzDecoder::new(&response_bytes[..]);
             let mut decompressed = Vec::new();
-            decoder.read_to_end(&mut decompressed).map_err(|_| {
-                Error::DependencyFailure(API_NAME, "failed to decompress gzip response")
-            })?;
+            decoder
+                .read_to_end(&mut decompressed)
+                .map_err(|_| Error::DependencyFailure(API_NAME, "failed to decompress gzip response"))?;
             tracing::debug!(
                 "GCM checkin: decompressed {} bytes -> {} bytes",
                 response_bytes.len(),
@@ -202,16 +220,9 @@ impl GcmSession {
             "response is missing security token",
         )?;
 
-        // Extract version_info for use in registration
-        let version_info = response.version_info;
-        if let Some(ref vi) = version_info {
-            tracing::debug!("GCM checkin version_info: {}", vi);
-        }
-
         Ok(Self {
             android_id,
             security_token,
-            version_info,
         })
     }
 
@@ -225,6 +236,107 @@ impl GcmSession {
         Self::request(http, Some(self.android_id), Some(self.security_token)).await
     }
 
+    /// Register with Firebase Installations to get FID and auth token
+    ///
+    /// This is required for FCM registration with modern Firebase SDK (>= 20.1.1)
+    pub async fn register_firebase_installation(
+        http: &reqwest::Client,
+        firebase_config: &FirebaseConfig,
+        package_name: &str,
+        cert_sha1: &str,
+    ) -> Result<FirebaseInstallation, Error> {
+        use base64::Engine;
+        use rand::Rng;
+
+        const API_NAME: &str = "Firebase Installations";
+
+        // Generate a random FID (Firebase Installation ID)
+        // FID is a 22-character base64url string starting with 'c' or similar
+        // Use OsRng instead of thread_rng() because thread_rng() is not Send
+        let fid = {
+            let mut rng = rand::rngs::OsRng;
+            let fid_bytes: [u8; 17] = rng.gen();
+            let mut fid = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(fid_bytes);
+            fid.truncate(22);
+            // FID should start with a valid char (c, d, e, f)
+            let first_byte = fid_bytes[0] & 0x0F;
+            let first_char = match first_byte % 4 {
+                0 => 'c',
+                1 => 'd',
+                2 => 'e',
+                _ => 'f',
+            };
+            fid.replace_range(0..1, &first_char.to_string());
+            fid
+        };
+
+        let url = format!(
+            "https://firebaseinstallations.googleapis.com/v1/projects/{}/installations",
+            firebase_config.project_id
+        );
+
+        let payload = serde_json::json!({
+            "fid": fid,
+            "appId": firebase_config.app_id,
+            "authVersion": "FIS_v2",
+            "sdkVersion": "a:17.0.0",
+        });
+
+        tracing::info!("Firebase Installations URL: {}", url);
+        tracing::debug!("Firebase Installations payload: {:?}", payload);
+
+        let response = http
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .header("x-goog-api-key", &firebase_config.api_key)
+            .header("x-android-package", package_name)
+            .header("x-android-cert", cert_sha1.to_uppercase())
+            .json(&payload)
+            .send()
+            .await
+            .map_err(|e| Error::Request(API_NAME, e))?;
+
+        let status = response.status();
+        let response_text = response
+            .text()
+            .await
+            .map_err(|e| Error::Response(API_NAME, e))?;
+
+        if !status.is_success() {
+            tracing::error!("Firebase Installations failed: {} - {}", status, response_text);
+            return Err(Error::DependencyRejection(
+                API_NAME,
+                format!("HTTP {}: {}", status, &response_text[..200.min(response_text.len())]),
+            ));
+        }
+
+        let response_json: serde_json::Value = serde_json::from_str(&response_text)
+            .map_err(|_| Error::DependencyFailure(API_NAME, "invalid JSON response"))?;
+
+        let fid = response_json["fid"]
+            .as_str()
+            .ok_or(Error::DependencyFailure(API_NAME, "missing fid in response"))?
+            .to_string();
+
+        let auth_token = response_json["authToken"]["token"]
+            .as_str()
+            .ok_or(Error::DependencyFailure(API_NAME, "missing authToken in response"))?
+            .to_string();
+
+        let refresh_token = response_json["refreshToken"]
+            .as_str()
+            .ok_or(Error::DependencyFailure(API_NAME, "missing refreshToken in response"))?
+            .to_string();
+
+        tracing::info!("Firebase Installations succeeded, FID: {}", fid);
+
+        Ok(FirebaseInstallation {
+            fid,
+            auth_token,
+            refresh_token,
+        })
+    }
+
     /// Register with GCM to get a token for receiving messages
     ///
     /// # Arguments
@@ -235,6 +347,8 @@ impl GcmSession {
     /// * `app_version` - App version code (versionCode from APK)
     /// * `app_version_name` - App version name (versionName from APK), sent as X-app_ver_name
     /// * `target_sdk` - Target SDK version from APK
+    /// * `firebase_config` - Firebase configuration for Installations API
+    /// * `firebase_installation` - Pre-registered Firebase Installation
     pub async fn register(
         &self,
         http: &reqwest::Client,
@@ -244,45 +358,52 @@ impl GcmSession {
         app_version: Option<i32>,
         app_version_name: Option<&str>,
         target_sdk: Option<i32>,
+        firebase_config: Option<&FirebaseConfig>,
+        firebase_installation: Option<&FirebaseInstallation>,
     ) -> Result<GcmToken, Error> {
         let android_id = self.android_id.to_string();
-        // microG RegisterRequest.java:71 uses android_id:security_token (known working on devices)
         let auth_header = format!("AidLogin {}:{}", &android_id, &self.security_token);
-        // User-Agent matching microG: Android-GCM/1.5 (device buildId)
         let user_agent = "Android-GCM/1.5 (redfin AP2A.240805.005)";
 
-        // Use provided values or defaults
         let app_ver_str = app_version.unwrap_or(1).to_string();
         let target_ver_str = target_sdk.unwrap_or(34).to_string();
 
-        // Build registration parameters matching GMS bvaz.java
-        let mut params = std::collections::HashMap::with_capacity(12);
-        params.insert("app", package_name);
-        params.insert("device", &android_id);
-        params.insert("sender", sender_id);
-        // GMS bumq.d(context) returns CheckinService_versionInfo from SharedPreferences
-        // This is the version_info field from the checkin response
-        let info_str = self.version_info.as_deref().unwrap_or("");
-        params.insert("info", info_str);
-        params.insert("app_ver", &app_ver_str);
-        params.insert("target_ver", &target_ver_str);
-        params.insert("gcm_ver", "254730035"); // GMS version
-        params.insert("plat", "0"); // Platform (0 = Android)
+        // Build registration parameters
+        let mut params = std::collections::HashMap::with_capacity(20);
+        params.insert("app", package_name.to_string());
+        params.insert("device", android_id.clone());
+        params.insert("sender", sender_id.to_string());
+        params.insert("app_ver", app_ver_str.clone());
+        params.insert("target_ver", target_ver_str.clone());
 
-        // Cert is required - must be lowercase SHA1 of original APK signing cert
-        let cert_lower;
+        // Cert is required
         if let Some(cert) = cert_sha1 {
-            cert_lower = cert.to_lowercase();
-            params.insert("cert", &cert_lower);
+            params.insert("cert", cert.to_lowercase());
         }
 
-        // microG sends app version name as X-app_ver_name (PushRegisterManager.java:80-81)
+        // App version name
         if let Some(ver_name) = app_version_name {
-            params.insert("X-app_ver_name", ver_name);
+            params.insert("X-app_ver_name", ver_name.to_string());
+        }
+
+        // Firebase Installations parameters (required for modern Firebase SDK >= 20.1.1)
+        if let Some(fis) = firebase_installation {
+            params.insert("X-appid", fis.fid.clone());
+            params.insert("X-Goog-Firebase-Installations-Auth", fis.auth_token.clone());
+            params.insert("X-cliv", "fiid-21.0.0".to_string());
+            params.insert("X-scope", "*".to_string());
+            params.insert("X-subtype", sender_id.to_string());
+
+            if let Some(config) = firebase_config {
+                params.insert("X-gmp_app_id", config.app_id.clone());
+            }
+
+            params.insert("X-Firebase-Client", "fire-installations/17.0.0".to_string());
         }
 
         const API_NAME: &str = "GCM registration";
 
+        tracing::info!("GCM register URL: {}", REGISTER_URL);
         tracing::info!("GCM register params: {:?}", params);
         tracing::info!("GCM auth header: {}", auth_header);
 
@@ -292,10 +413,6 @@ impl GcmSession {
             .header(reqwest::header::AUTHORIZATION, &auth_header)
             .header(reqwest::header::USER_AGENT, user_agent)
             .header("app", package_name)
-            .header("gcm_ver", "254730035")
-            .header("app_ver", &app_ver_str)
-            // GMS bvaz.java:319-320 adds request_type header
-            .header("request_type", "1") // 1 = register
             .send()
             .await
             .map_err(|e| Error::Request(API_NAME, e))?;
