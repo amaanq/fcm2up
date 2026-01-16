@@ -402,54 +402,82 @@ impl GcmSession {
         }
 
         const API_NAME: &str = "GCM registration";
+        const MAX_RETRIES: u32 = 10;
+        const RETRY_DELAY_MS: u64 = 1000;
 
         tracing::info!("GCM register URL: {}", REGISTER_URL);
-        tracing::info!("GCM register params: {:?}", params);
-        tracing::info!("GCM auth header: {}", auth_header);
+        tracing::debug!("GCM register params: {:?}", params);
+        tracing::debug!("GCM auth header: {}", auth_header);
 
-        let result = http
-            .post(REGISTER_URL)
-            .form(&params)
-            .header(reqwest::header::AUTHORIZATION, &auth_header)
-            .header(reqwest::header::USER_AGENT, user_agent)
-            .header("app", package_name)
-            .send()
-            .await
-            .map_err(|e| Error::Request(API_NAME, e))?;
+        let mut last_error = None;
 
-        let response_text = result
-            .text()
-            .await
-            .map_err(|e| Error::Response(API_NAME, e))?;
+        for attempt in 1..=MAX_RETRIES {
+            let result = http
+                .post(REGISTER_URL)
+                .form(&params)
+                .header(reqwest::header::AUTHORIZATION, &auth_header)
+                .header(reqwest::header::USER_AGENT, user_agent)
+                .header("app", package_name)
+                .send()
+                .await
+                .map_err(|e| Error::Request(API_NAME, e))?;
 
-        tracing::info!("GCM register response: {}", response_text);
+            let response_text = result
+                .text()
+                .await
+                .map_err(|e| Error::Response(API_NAME, e))?;
 
-        const ERR_EOF: Error = Error::DependencyFailure(API_NAME, "malformed response");
+            tracing::info!("GCM register response (attempt {}): {}", attempt, response_text);
 
-        // Response format is "token=<token>" or "Error=<reason>"
-        let mut tokens = response_text.split('=');
-        match tokens.next() {
-            Some("Error") => {
-                return Err(Error::DependencyRejection(
-                    API_NAME,
-                    tokens.next().unwrap_or("no reason given").into(),
-                ))
+            // Response format is "token=<token>" or "Error=<reason>"
+            let mut tokens = response_text.split('=');
+            match tokens.next() {
+                Some("Error") => {
+                    let error_msg = tokens.next().unwrap_or("no reason given");
+                    // Retry on PHONE_REGISTRATION_ERROR (transient/timing issue)
+                    if error_msg == "PHONE_REGISTRATION_ERROR" && attempt < MAX_RETRIES {
+                        tracing::warn!(
+                            "GCM registration failed (attempt {}/{}), retrying in {}ms...",
+                            attempt,
+                            MAX_RETRIES,
+                            RETRY_DELAY_MS
+                        );
+                        last_error = Some(error_msg.to_string());
+                        tokio::time::sleep(tokio::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+                        continue;
+                    }
+                    return Err(Error::DependencyRejection(API_NAME, error_msg.into()));
+                }
+                Some("token") => {
+                    // Success - extract token
+                    if let Some(token) = tokens.next() {
+                        return Ok(GcmToken {
+                            token: String::from(token),
+                        });
+                    }
+                }
+                None => {}
+                Some(other) => {
+                    tracing::warn!("Unexpected GCM response key: {}", other);
+                }
             }
-            Some("token") => {
-                // Success case
+
+            // If we get here with a token response but couldn't parse it
+            if let Some(token) = tokens.next() {
+                return Ok(GcmToken {
+                    token: String::from(token),
+                });
             }
-            None => return Err(ERR_EOF),
-            Some(other) => {
-                tracing::warn!("Unexpected GCM response key: {}", other);
-            }
+
+            // Malformed response - don't retry
+            return Err(Error::DependencyFailure(API_NAME, "malformed response"));
         }
 
-        match tokens.next() {
-            Some(v) => Ok(GcmToken {
-                token: String::from(v),
-            }),
-            None => Err(ERR_EOF),
-        }
+        // All retries exhausted
+        Err(Error::DependencyRejection(
+            API_NAME,
+            last_error.unwrap_or_else(|| "max retries exceeded".into()),
+        ))
     }
 
     /// Connect to mtalk.google.com MCS server

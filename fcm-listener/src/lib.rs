@@ -117,7 +117,7 @@ impl Registration {
             firebase_installation.fid
         );
 
-        // Step 3: Register with GCM to get a token
+        // Step 3: Register with GCM to get a token (has built-in retry for transient errors)
         tracing::debug!("Registering with GCM...");
         let gcm_token = gcm_session
             .register(
