@@ -63,14 +63,6 @@ impl FcmManager {
         // Format: "1:<sender_id>:android:<hash>"
         let sender_id = extract_sender_id(&firebase_app_id)?;
 
-        info!(
-            "Registering with FCM for app: {} (sender_id: {}, package: {}, cert: {})",
-            app_id,
-            sender_id,
-            app_id,
-            cert_sha1.as_deref().unwrap_or("none")
-        );
-
         // Build FCM credentials
         let credentials = FcmCredentials {
             sender_id: sender_id.clone(),
@@ -84,8 +76,31 @@ impl FcmManager {
             target_sdk,
         };
 
-        // Register with FCM
-        let registration = Registration::register(&self.http_client, &credentials).await?;
+        // Try to load existing session first
+        let registration = if let Ok(Some(session_json)) = db.get_fcm_session(&app_id).await {
+            match serde_json::from_str::<Registration>(&session_json) {
+                Ok(existing) => {
+                    info!(
+                        "Reusing existing FCM session for {} (token: {}...)",
+                        app_id,
+                        &existing.fcm_token()[..20.min(existing.fcm_token().len())]
+                    );
+                    existing
+                }
+                Err(e) => {
+                    warn!("Failed to deserialize saved session for {}: {}, re-registering", app_id, e);
+                    Registration::register(&self.http_client, &credentials).await?
+                }
+            }
+        } else {
+            info!(
+                "Registering with FCM for app: {} (sender_id: {}, cert: {})",
+                app_id,
+                sender_id,
+                credentials.cert_sha1.as_deref().unwrap_or("none")
+            );
+            Registration::register(&self.http_client, &credentials).await?
+        };
 
         let fcm_token = registration.fcm_token().to_string();
         info!(

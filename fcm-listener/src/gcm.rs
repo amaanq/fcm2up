@@ -367,57 +367,61 @@ impl GcmSession {
 
         let app_ver_str = app_version.unwrap_or(1).to_string();
         let target_ver_str = target_sdk.unwrap_or(34).to_string();
+        let cert_str = cert_sha1.map(|c| c.to_lowercase()).unwrap_or_default();
+        let ver_name_str = app_version_name.unwrap_or("1.0.0");
 
-        // Build registration parameters
-        let mut params = std::collections::HashMap::with_capacity(20);
-        params.insert("app", package_name.to_string());
-        params.insert("device", android_id.clone());
-        params.insert("sender", sender_id.to_string());
-        params.insert("app_ver", app_ver_str.clone());
-        params.insert("target_ver", target_ver_str.clone());
-
-        // Cert is required
-        if let Some(cert) = cert_sha1 {
-            params.insert("cert", cert.to_lowercase());
-        }
-
-        // App version name
-        if let Some(ver_name) = app_version_name {
-            params.insert("X-app_ver_name", ver_name.to_string());
-        }
-
-        // Firebase Installations parameters (required for modern Firebase SDK >= 20.1.1)
-        if let Some(fis) = firebase_installation {
-            params.insert("X-appid", fis.fid.clone());
-            params.insert("X-Goog-Firebase-Installations-Auth", fis.auth_token.clone());
-            params.insert("X-cliv", "fiid-21.0.0".to_string());
-            params.insert("X-scope", "*".to_string());
-            params.insert("X-subtype", sender_id.to_string());
-
-            if let Some(config) = firebase_config {
-                params.insert("X-gmp_app_id", config.app_id.clone());
-            }
-
-            params.insert("X-Firebase-Client", "fire-installations/17.0.0".to_string());
-        }
+        // Build form body with EXACT ordering matching Java's LinkedHashMap
+        // This is critical - HashMap has random iteration order which causes inconsistent results
+        let form_body = if let (Some(fis), Some(config)) = (firebase_installation, firebase_config) {
+            // Full Firebase Installations flow (modern Firebase SDK >= 20.1.1)
+            format!(
+                "app={}&device={}&sender={}&cert={}&app_ver={}&target_ver={}&X-appid={}&X-Goog-Firebase-Installations-Auth={}&X-cliv={}&X-scope={}&X-subtype={}&X-gmp_app_id={}&X-Firebase-Client={}&X-app_ver_name={}",
+                urlencoding::encode(package_name),
+                urlencoding::encode(&android_id),
+                urlencoding::encode(sender_id),
+                urlencoding::encode(&cert_str),
+                urlencoding::encode(&app_ver_str),
+                urlencoding::encode(&target_ver_str),
+                urlencoding::encode(&fis.fid),
+                urlencoding::encode(&fis.auth_token),
+                urlencoding::encode("fiid-21.0.0"),
+                urlencoding::encode("*"),
+                urlencoding::encode(sender_id),
+                urlencoding::encode(&config.app_id),
+                urlencoding::encode("fire-installations/17.0.0"),
+                urlencoding::encode(ver_name_str),
+            )
+        } else {
+            // Legacy registration without Firebase Installations
+            format!(
+                "app={}&device={}&sender={}&cert={}&app_ver={}&target_ver={}",
+                urlencoding::encode(package_name),
+                urlencoding::encode(&android_id),
+                urlencoding::encode(sender_id),
+                urlencoding::encode(&cert_str),
+                urlencoding::encode(&app_ver_str),
+                urlencoding::encode(&target_ver_str),
+            )
+        };
 
         const API_NAME: &str = "GCM registration";
-        const MAX_RETRIES: u32 = 10;
-        const RETRY_DELAY_MS: u64 = 1000;
+        // Aggressive retry: 15 attempts × 250ms = ~4s total window
+        // PHONE_REGISTRATION_ERROR is typically due to FIS token propagation delay
+        const MAX_RETRIES: u32 = 15;
+        const RETRY_DELAY_MS: u64 = 250;
 
-        tracing::info!("GCM register URL: {}", REGISTER_URL);
-        tracing::debug!("GCM register params: {:?}", params);
-        tracing::debug!("GCM auth header: {}", auth_header);
+        tracing::debug!("GCM register: {}", form_body);
 
         let mut last_error = None;
 
         for attempt in 1..=MAX_RETRIES {
             let result = http
                 .post(REGISTER_URL)
-                .form(&params)
+                .header(reqwest::header::CONTENT_TYPE, "application/x-www-form-urlencoded")
                 .header(reqwest::header::AUTHORIZATION, &auth_header)
                 .header(reqwest::header::USER_AGENT, user_agent)
                 .header("app", package_name)
+                .body(form_body.clone())
                 .send()
                 .await
                 .map_err(|e| Error::Request(API_NAME, e))?;
@@ -427,53 +431,31 @@ impl GcmSession {
                 .await
                 .map_err(|e| Error::Response(API_NAME, e))?;
 
-            tracing::info!("GCM register response (attempt {}): {}", attempt, response_text);
-
             // Response format is "token=<token>" or "Error=<reason>"
-            let mut tokens = response_text.split('=');
-            match tokens.next() {
-                Some("Error") => {
-                    let error_msg = tokens.next().unwrap_or("no reason given");
-                    // Retry on PHONE_REGISTRATION_ERROR (transient/timing issue)
-                    if error_msg == "PHONE_REGISTRATION_ERROR" && attempt < MAX_RETRIES {
-                        tracing::warn!(
-                            "GCM registration failed (attempt {}/{}), retrying in {}ms...",
-                            attempt,
-                            MAX_RETRIES,
-                            RETRY_DELAY_MS
-                        );
-                        last_error = Some(error_msg.to_string());
-                        tokio::time::sleep(tokio::time::Duration::from_millis(RETRY_DELAY_MS)).await;
-                        continue;
-                    }
-                    return Err(Error::DependencyRejection(API_NAME, error_msg.into()));
+            if let Some(token) = response_text.strip_prefix("token=") {
+                if attempt > 1 {
+                    tracing::info!("GCM registration succeeded on attempt {}", attempt);
                 }
-                Some("token") => {
-                    // Success - extract token
-                    if let Some(token) = tokens.next() {
-                        return Ok(GcmToken {
-                            token: String::from(token),
-                        });
-                    }
-                }
-                None => {}
-                Some(other) => {
-                    tracing::warn!("Unexpected GCM response key: {}", other);
-                }
-            }
-
-            // If we get here with a token response but couldn't parse it
-            if let Some(token) = tokens.next() {
                 return Ok(GcmToken {
-                    token: String::from(token),
+                    token: token.to_string(),
                 });
             }
 
-            // Malformed response - don't retry
+            if let Some(error) = response_text.strip_prefix("Error=") {
+                // Retry on PHONE_REGISTRATION_ERROR (transient timing issue)
+                if error == "PHONE_REGISTRATION_ERROR" && attempt < MAX_RETRIES {
+                    tracing::debug!("GCM registration attempt {}/{} failed, retrying...", attempt, MAX_RETRIES);
+                    last_error = Some(error.to_string());
+                    tokio::time::sleep(tokio::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+                    continue;
+                }
+                return Err(Error::DependencyRejection(API_NAME, error.into()));
+            }
+
+            tracing::warn!("Unexpected GCM response: {}", response_text);
             return Err(Error::DependencyFailure(API_NAME, "malformed response"));
         }
 
-        // All retries exhausted
         Err(Error::DependencyRejection(
             API_NAME,
             last_error.unwrap_or_else(|| "max retries exceeded".into()),
