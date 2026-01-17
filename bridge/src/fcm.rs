@@ -236,13 +236,29 @@ async fn run_listener(
                             let body = if let Some(raw) = &data.raw_data {
                                 raw.clone()
                             } else {
-                                // Serialize app_data as JSON if no raw_data
-                                let app_data: HashMap<&str, &str> = data
+                                // Check for encrypted payload in app_data
+                                let app_data_map: HashMap<&str, &str> = data
                                     .app_data
                                     .iter()
                                     .map(|(k, v)| (k.as_str(), v.as_str()))
                                     .collect();
-                                serde_json::to_vec(&app_data).unwrap_or_default()
+
+                                if let Some(encrypted) = app_data_map.get("encrypted") {
+                                    // Decrypt the payload using session keys
+                                    match registration.gcm_session.decrypt(encrypted) {
+                                        Ok(decrypted) => {
+                                            info!("Decrypted FCM message for {}: {} bytes", app_id, decrypted.len());
+                                            decrypted
+                                        }
+                                        Err(e) => {
+                                            warn!("Failed to decrypt FCM message for {}: {}, forwarding raw", app_id, e);
+                                            serde_json::to_vec(&app_data_map).unwrap_or_default()
+                                        }
+                                    }
+                                } else {
+                                    // No encryption, serialize app_data as JSON
+                                    serde_json::to_vec(&app_data_map).unwrap_or_default()
+                                }
                             };
 
                             if !body.is_empty() {

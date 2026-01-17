@@ -39,6 +39,7 @@ object Fcm2UpShim {
     private const val KEY_FCM_HANDLER_METHOD = "fcm_handler_method"
     private const val KEY_FCM_SERVICE_CLASS = "fcm_service_class"
     private const val KEY_CERT_SHA1 = "cert_sha1"
+    private const val KEY_TOKEN_DELIVERED = "token_delivered"
 
     // Actions we SEND to the distributor (ntfy)
     private const val ACTION_REGISTER = "org.unifiedpush.android.distributor.REGISTER"
@@ -58,6 +59,15 @@ object Fcm2UpShim {
     private fun preview(s: String?): String {
         if (s == null) return "null"
         return if (s.length > 20) s.substring(0, 20) + "..." else s
+    }
+
+    // Helper to try getting a method without throwing
+    private fun tryGetMethod(clazz: Class<*>, name: String): java.lang.reflect.Method? {
+        return try {
+            clazz.getDeclaredMethod(name, String::class.java)
+        } catch (e: NoSuchMethodException) {
+            null
+        }
     }
 
     /**
@@ -89,7 +99,37 @@ object Fcm2UpShim {
     }
 
     /**
+     * Intercept onNewToken call and replace with bridge token if available.
+     * Called from patched smali before the original onNewToken implementation.
+     * Returns the token that should be used (bridge token or original).
+     */
+    @JvmStatic
+    fun interceptToken(context: Context, originalToken: String): String {
+        val prefs = getPrefs(context)
+        val bridgeToken = prefs.getString(KEY_BRIDGE_FCM_TOKEN, null)
+
+        // If we have a bridge token, use it instead of Google's token
+        if (notEmpty(bridgeToken) && bridgeToken != null) {
+            Log.i(TAG, "Intercepting onNewToken: replacing Google token with bridge token")
+            Log.d(TAG, "  Original: ${preview(originalToken)}")
+            Log.d(TAG, "  Bridge:   ${preview(bridgeToken)}")
+            return bridgeToken
+        }
+
+        // No bridge token yet - store the Google token and trigger registration
+        Log.d(TAG, "onNewToken intercepted with Google token: ${preview(originalToken)}")
+        prefs.edit().putString(KEY_FCM_TOKEN, originalToken).apply()
+
+        if (getEndpoint(context) != null) {
+            sendRegistrationToBridge(context)
+        }
+
+        return originalToken
+    }
+
+    /**
      * Called when app receives new FCM token from Google.
+     * @deprecated Use interceptToken instead - this is kept for compatibility
      */
     @JvmStatic
     fun onToken(context: Context, fcmToken: String) {
@@ -195,7 +235,96 @@ object Fcm2UpShim {
     @JvmStatic
     fun onMessage(context: Context, message: ByteArray) {
         Log.d(TAG, "UP message received: ${message.size} bytes")
-        forwardToFcmHandler(context, message)
+
+        // Log message content for debugging
+        val messageStr = String(message)
+        Log.d(TAG, "Message content: $messageStr")
+
+        // Try to start the FCM service with the message data
+        val prefs = getPrefs(context)
+        val fcmServiceClass = prefs.getString(KEY_FCM_SERVICE_CLASS, null)
+
+        if (fcmServiceClass != null && fcmServiceClass.length > 0) {
+            try {
+                val intent = Intent()
+                intent.setClassName(context.packageName, fcmServiceClass)
+                intent.action = "com.fcm2up.FCM_MESSAGE"
+                intent.putExtra("message", message)
+                intent.putExtra("message_string", messageStr)
+                context.startService(intent)
+                Log.i(TAG, "Started FCM service with message")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to start FCM service with message", e)
+                // Fall back to showing notification directly
+                showNotificationFromMessage(context, messageStr)
+            }
+        } else {
+            Log.w(TAG, "No FCM service class configured")
+            showNotificationFromMessage(context, messageStr)
+        }
+    }
+
+    /**
+     * Parse FCM message data and show a notification directly.
+     * Fallback when we can't start the app's FCM service.
+     */
+    private fun showNotificationFromMessage(context: Context, messageStr: String) {
+        try {
+            val json = JSONObject(messageStr)
+
+            // Try to extract notification fields from FCM data
+            val title = json.optString("title", json.optString("notification_title", "GitHub"))
+            val body = json.optString("body", json.optString("notification_body", json.optString("message", "")))
+
+            if (body.length > 0) {
+                showNotification(context, title, body)
+            } else {
+                Log.d(TAG, "No notification body in message, raw data only")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to parse message as JSON", e)
+        }
+    }
+
+    /**
+     * Show a notification using Android's notification API.
+     */
+    private fun showNotification(context: Context, title: String, body: String) {
+        try {
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+
+            // Create notification channel for Android O+
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                val channel = android.app.NotificationChannel(
+                    "fcm2up_channel",
+                    "Push Notifications",
+                    android.app.NotificationManager.IMPORTANCE_DEFAULT
+                )
+                notificationManager.createNotificationChannel(channel)
+            }
+
+            // Create launch intent
+            val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            val pendingIntent = if (launchIntent != null) {
+                android.app.PendingIntent.getActivity(
+                    context, 0, launchIntent,
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+                )
+            } else null
+
+            val notification = android.app.Notification.Builder(context, "fcm2up_channel")
+                .setContentTitle(title)
+                .setContentText(body)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+                .build()
+
+            notificationManager.notify(System.currentTimeMillis().toInt(), notification)
+            Log.i(TAG, "Showed notification: $title - $body")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to show notification", e)
+        }
     }
 
     /**
@@ -390,6 +519,12 @@ object Fcm2UpShim {
     /**
      * Trigger the app's onNewToken callback with the bridge's token.
      * This makes the app send the bridge's token to its backend.
+     *
+     * Strategy: Use our patched onStartCommand in the FCM service.
+     * When we send an intent with action "com.fcm2up.INJECT_TOKEN",
+     * the patched service will extract the token and call onNewToken() directly.
+     * This works on non-GMS devices because the service is properly initialized
+     * through Android's lifecycle (DI injection happens in onCreate).
      */
     private fun triggerAppOnNewToken(context: Context, bridgeToken: String) {
         val prefs = getPrefs(context)
@@ -400,43 +535,24 @@ object Fcm2UpShim {
             return
         }
 
-        Log.i(TAG, "Triggering app's onNewToken with bridge token: ${preview(bridgeToken)}")
+        Log.i(TAG, "Triggering onNewToken via patched service: ${preview(bridgeToken)}")
 
         try {
-            val clazz = Class.forName(fcmServiceClass)
+            // Create intent with our special action
+            // The patched onStartCommand will recognize this and call onNewToken()
+            val intent = Intent()
+            intent.setClassName(context.packageName, fcmServiceClass)
+            intent.action = "com.fcm2up.INJECT_TOKEN"
+            intent.putExtra("token", bridgeToken)
 
-            // Find onNewToken(String) method
-            val method = clazz.getDeclaredMethod("onNewToken", String::class.java)
-            method.isAccessible = true
+            // Start the service - this triggers:
+            // 1. Service.onCreate() if not running (DI injection happens here)
+            // 2. Our patched onStartCommand() which calls onNewToken(bridgeToken)
+            context.startService(intent)
+            Log.i(TAG, "Started FCM service with INJECT_TOKEN action")
 
-            // Create an instance of the service
-            val constructor = clazz.getDeclaredConstructor()
-            constructor.isAccessible = true
-            val instance = constructor.newInstance()
-
-            // CRITICAL: Attach context to the service instance!
-            // FirebaseMessagingService extends Service extends ContextWrapper.
-            // Without this, the service can't access application context and will NPE.
-            if (instance is android.content.ContextWrapper) {
-                val attachMethod = android.content.ContextWrapper::class.java
-                    .getDeclaredMethod("attachBaseContext", Context::class.java)
-                attachMethod.isAccessible = true
-                attachMethod.invoke(instance, context.applicationContext)
-                Log.d(TAG, "Attached context to FCM service instance")
-            }
-
-            // Set the re-entry guard BEFORE calling onNewToken
-            // This prevents our hook from processing this call
-            isInjectingToken = true
-            try {
-                method.invoke(instance, bridgeToken)
-                Log.i(TAG, "Successfully injected bridge token into app's onNewToken")
-            } finally {
-                isInjectingToken = false
-            }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to trigger app's onNewToken", e)
-            isInjectingToken = false
+            Log.e(TAG, "Failed to trigger onNewToken via service", e)
         }
     }
 
@@ -457,6 +573,37 @@ object Fcm2UpShim {
     @JvmStatic
     fun getBridgeUrl(context: Context): String? {
         return getPrefs(context).getString(KEY_BRIDGE_URL, null)
+    }
+
+    /**
+     * Check for a pending bridge token that needs to be delivered.
+     * Called from smali on every FCM service start.
+     * Returns the token if pending, null otherwise.
+     * Automatically marks the token as delivered to prevent repeated calls.
+     */
+    @JvmStatic
+    fun getPendingBridgeToken(context: Context): String? {
+        val prefs = getPrefs(context)
+        val bridgeToken = prefs.getString(KEY_BRIDGE_FCM_TOKEN, null)
+        val delivered = prefs.getBoolean(KEY_TOKEN_DELIVERED, false)
+
+        if (bridgeToken != null && bridgeToken.length > 0 && !delivered) {
+            // Mark as delivered FIRST to prevent re-entry
+            prefs.edit().putBoolean(KEY_TOKEN_DELIVERED, true).apply()
+            Log.i(TAG, "Pending bridge token found, will deliver: ${preview(bridgeToken)}")
+            return bridgeToken
+        }
+
+        return null
+    }
+
+    /**
+     * Reset the token delivered flag.
+     * Call this when re-registration is needed.
+     */
+    @JvmStatic
+    fun resetTokenDelivery(context: Context) {
+        getPrefs(context).edit().putBoolean(KEY_TOKEN_DELIVERED, false).apply()
     }
 
     private fun mapToJson(map: Map<String, String>): String {

@@ -3,6 +3,7 @@ pub mod contract {
 }
 
 use crate::Error;
+use base64::Engine;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
@@ -33,6 +34,62 @@ pub struct GcmSession {
 
     #[serde_as(as = "serde_with::DisplayFromStr")]
     pub security_token: u64,
+
+    /// EC P-256 private key for decryption (base64 URL-safe, 32 bytes)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub private_key: Option<String>,
+
+    /// EC P-256 public key for registration (base64 URL-safe, 65 bytes uncompressed)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub public_key: Option<String>,
+
+    /// Auth secret for decryption (base64 URL-safe, 16 bytes)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth_secret: Option<String>,
+}
+
+impl GcmSession {
+    /// Decrypt an encrypted FCM message payload
+    pub fn decrypt(&self, encrypted_base64: &str) -> Result<Vec<u8>, Error> {
+        let private_key_b64 = self.private_key.as_ref().ok_or_else(|| {
+            Error::DependencyFailure("FCM decryption", "no private key in session")
+        })?;
+        let public_key_b64 = self.public_key.as_ref().ok_or_else(|| {
+            Error::DependencyFailure("FCM decryption", "no public key in session")
+        })?;
+        let auth_secret_b64 = self.auth_secret.as_ref().ok_or_else(|| {
+            Error::DependencyFailure("FCM decryption", "no auth secret in session")
+        })?;
+
+        // Decode the encrypted payload (standard base64, may have / and +)
+        let encrypted = base64::engine::general_purpose::STANDARD
+            .decode(encrypted_base64)
+            .map_err(|_| Error::DependencyFailure("FCM decryption", "invalid base64 payload"))?;
+
+        // Decode private key (URL-safe base64)
+        let private_key_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(private_key_b64)
+            .map_err(|_| Error::DependencyFailure("FCM decryption", "invalid private key base64"))?;
+
+        // Decode public key (URL-safe base64)
+        let public_key_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(public_key_b64)
+            .map_err(|_| Error::DependencyFailure("FCM decryption", "invalid public key base64"))?;
+
+        // Decode auth secret (URL-safe base64)
+        let auth_secret_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(auth_secret_b64)
+            .map_err(|_| Error::DependencyFailure("FCM decryption", "invalid auth secret base64"))?;
+
+        // Create EcKeyComponents from private and public key
+        let ec_key = ece::crypto::EcKeyComponents::new(private_key_bytes, public_key_bytes);
+
+        // Decrypt using ece (aes128gcm format used by modern FCM)
+        let decrypted = ece::decrypt(&ec_key, &auth_secret_bytes, &encrypted)
+            .map_err(|e| Error::DependencyFailure("FCM decryption", Box::leak(format!("ece error: {}", e).into_boxed_str())))?;
+
+        Ok(decrypted)
+    }
 }
 
 /// Token received from GCM registration
@@ -223,17 +280,58 @@ impl GcmSession {
         Ok(Self {
             android_id,
             security_token,
+            private_key: None,
+            public_key: None,
+            auth_secret: None,
         })
     }
 
     /// Perform initial GCM checkin to get android_id and security_token
     pub async fn checkin(http: &reqwest::Client) -> Result<Self, Error> {
-        Self::request(http, None, None).await
+        let mut session = Self::request(http, None, None).await?;
+        // Generate encryption keys for this session
+        session.generate_keys()?;
+        Ok(session)
     }
 
     /// Refresh the session (re-checkin with existing credentials)
     pub async fn refresh(&self, http: &reqwest::Client) -> Result<Self, Error> {
-        Self::request(http, Some(self.android_id), Some(self.security_token)).await
+        let mut session = Self::request(http, Some(self.android_id), Some(self.security_token)).await?;
+        // Keep existing keys if we have them, otherwise generate new ones
+        if self.private_key.is_some() {
+            session.private_key = self.private_key.clone();
+            session.public_key = self.public_key.clone();
+            session.auth_secret = self.auth_secret.clone();
+        } else {
+            session.generate_keys()?;
+        }
+        Ok(session)
+    }
+
+    /// Generate EC P-256 key pair and auth secret for push encryption
+    fn generate_keys(&mut self) -> Result<(), Error> {
+        // Generate key pair and auth secret using ece crate
+        let (local_key, auth_secret) = ece::generate_keypair_and_auth_secret()
+            .map_err(|_| Error::DependencyFailure("key generation", "failed to generate EC key pair"))?;
+
+        // Get raw key components
+        let key_components = local_key.raw_components()
+            .map_err(|_| Error::DependencyFailure("key generation", "failed to extract key components"))?;
+
+        // Store private key, public key, and auth secret as base64
+        self.private_key = Some(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(key_components.private_key()));
+        self.public_key = Some(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(key_components.public_key()));
+        self.auth_secret = Some(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&auth_secret));
+
+        tracing::debug!("Generated FCM encryption keys");
+        Ok(())
+    }
+
+    /// Get the public key for registration (base64 URL-safe)
+    pub fn get_public_key(&self) -> Result<String, Error> {
+        self.public_key.clone().ok_or_else(|| {
+            Error::DependencyFailure("public key", "no public key in session")
+        })
     }
 
     /// Register with Firebase Installations to get FID and auth token
@@ -370,12 +468,17 @@ impl GcmSession {
         let cert_str = cert_sha1.map(|c| c.to_lowercase()).unwrap_or_default();
         let ver_name_str = app_version_name.unwrap_or("1.0.0");
 
+        // Get encryption keys for push encryption
+        let public_key = self.get_public_key().unwrap_or_default();
+        let auth_secret = self.auth_secret.clone().unwrap_or_default();
+
         // Build form body with EXACT ordering matching Java's LinkedHashMap
         // This is critical - HashMap has random iteration order which causes inconsistent results
         let form_body = if let (Some(fis), Some(config)) = (firebase_installation, firebase_config) {
             // Full Firebase Installations flow (modern Firebase SDK >= 20.1.1)
+            // Include encryption_key and encryption_auth for encrypted push messages
             format!(
-                "app={}&device={}&sender={}&cert={}&app_ver={}&target_ver={}&X-appid={}&X-Goog-Firebase-Installations-Auth={}&X-cliv={}&X-scope={}&X-subtype={}&X-gmp_app_id={}&X-Firebase-Client={}&X-app_ver_name={}",
+                "app={}&device={}&sender={}&cert={}&app_ver={}&target_ver={}&X-appid={}&X-Goog-Firebase-Installations-Auth={}&X-cliv={}&X-scope={}&X-subtype={}&X-gmp_app_id={}&X-Firebase-Client={}&X-app_ver_name={}&encryption_key={}&encryption_auth={}",
                 urlencoding::encode(package_name),
                 urlencoding::encode(&android_id),
                 urlencoding::encode(sender_id),
@@ -390,17 +493,21 @@ impl GcmSession {
                 urlencoding::encode(&config.app_id),
                 urlencoding::encode("fire-installations/17.0.0"),
                 urlencoding::encode(ver_name_str),
+                urlencoding::encode(&public_key),
+                urlencoding::encode(&auth_secret),
             )
         } else {
             // Legacy registration without Firebase Installations
             format!(
-                "app={}&device={}&sender={}&cert={}&app_ver={}&target_ver={}",
+                "app={}&device={}&sender={}&cert={}&app_ver={}&target_ver={}&encryption_key={}&encryption_auth={}",
                 urlencoding::encode(package_name),
                 urlencoding::encode(&android_id),
                 urlencoding::encode(sender_id),
                 urlencoding::encode(&cert_str),
                 urlencoding::encode(&app_ver_str),
                 urlencoding::encode(&target_ver_str),
+                urlencoding::encode(&public_key),
+                urlencoding::encode(&auth_secret),
             )
         };
 

@@ -159,23 +159,106 @@ pub fn zipalign_apk(apk_path: &Path) -> Result<()> {
 }
 
 /// Find Firebase messaging service class in decompiled APK
+/// First checks manifest for registered service, then falls back to smali search
 pub fn find_firebase_service(decoded_dir: &Path) -> Result<Option<PathBuf>> {
-    let smali_dir = decoded_dir.join("smali");
+    // First, try to find the service class from the manifest
+    let manifest_path = decoded_dir.join("AndroidManifest.xml");
+    if manifest_path.exists() {
+        let manifest = std::fs::read_to_string(&manifest_path)?;
 
-    for entry in WalkDir::new(&smali_dir)
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().is_some_and(|ext| ext == "smali"))
-    {
-        let content = std::fs::read_to_string(entry.path())?;
-
-        // Look for class that extends FirebaseMessagingService
-        if content.contains(".super Lcom/google/firebase/messaging/FirebaseMessagingService;") {
-            return Ok(Some(entry.path().to_path_buf()));
+        // Look for services with MESSAGING_EVENT intent filter
+        // Pattern: <service android:name="com.example.MyService">...<action android:name="com.google.firebase.MESSAGING_EVENT"/>
+        if let Some(service_class) = find_fcm_service_from_manifest(&manifest) {
+            // Convert class name to smali path
+            let smali_path = class_name_to_smali_path(decoded_dir, &service_class);
+            if smali_path.exists() {
+                return Ok(Some(smali_path));
+            }
         }
     }
 
-    Ok(None)
+    // Fall back to searching smali files
+    let smali_dirs = find_smali_dirs(decoded_dir);
+    let mut candidates = Vec::new();
+
+    for smali_dir in &smali_dirs {
+        for entry in WalkDir::new(smali_dir)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "smali"))
+        {
+            let content = std::fs::read_to_string(entry.path())?;
+
+            // Look for class that extends FirebaseMessagingService
+            if content.contains(".super Lcom/google/firebase/messaging/FirebaseMessagingService;") {
+                let is_abstract = content.contains(".class public abstract");
+                candidates.push((entry.path().to_path_buf(), is_abstract));
+            }
+        }
+    }
+
+    // Prefer non-abstract classes (concrete implementations)
+    for (path, is_abstract) in &candidates {
+        if !is_abstract {
+            return Ok(Some(path.clone()));
+        }
+    }
+
+    // Fall back to first candidate (even if abstract)
+    Ok(candidates.into_iter().next().map(|(p, _)| p))
+}
+
+/// Parse manifest to find the FCM service class
+fn find_fcm_service_from_manifest(manifest: &str) -> Option<String> {
+    // Simple approach: find service with MESSAGING_EVENT action
+    // The manifest format after apktool is XML-like
+
+    let mut in_service = false;
+    let mut service_name = String::new();
+    let mut found_messaging_event = false;
+
+    for line in manifest.lines() {
+        let trimmed = line.trim();
+
+        if trimmed.starts_with("<service") {
+            in_service = true;
+            found_messaging_event = false;
+            // Extract android:name="..."
+            if let Some(start) = trimmed.find("android:name=\"") {
+                let rest = &trimmed[start + 14..];
+                if let Some(end) = rest.find('"') {
+                    service_name = rest[..end].to_string();
+                }
+            }
+        } else if in_service && trimmed.contains("com.google.firebase.MESSAGING_EVENT") {
+            found_messaging_event = true;
+        } else if trimmed.starts_with("</service>") {
+            if in_service && found_messaging_event && !service_name.is_empty() {
+                return Some(service_name);
+            }
+            in_service = false;
+            service_name.clear();
+        }
+    }
+
+    None
+}
+
+/// Convert Java class name to smali file path
+fn class_name_to_smali_path(decoded_dir: &Path, class_name: &str) -> PathBuf {
+    let smali_dirs = find_smali_dirs(decoded_dir);
+    let relative_path = class_name.replace('.', "/") + ".smali";
+
+    // Check each smali directory
+    for smali_dir in smali_dirs {
+        let path = smali_dir.join(&relative_path);
+        if path.exists() {
+            return path;
+        }
+    }
+
+    // Default to first smali dir
+    decoded_dir.join("smali").join(&relative_path)
 }
 
 /// Find all smali directories (for multi-dex APKs)

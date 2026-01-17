@@ -12,6 +12,7 @@ path = "src/lib.rs"
 
 [dependencies]
 base64 = "0.22"
+ece = "2.3"
 bytes = "1.10"
 flate2 = "1.0"
 pin-project-lite = "0.2"

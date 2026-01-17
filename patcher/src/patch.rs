@@ -88,7 +88,7 @@ pub fn patch_apk(config: PatchConfig) -> Result<()> {
     // Step 5: Patch smali hooks
     println!("\n[5/8] Patching hooks...");
     let fcm_service_class = if let Some(service_path) = firebase_service {
-        patch_firebase_service(&service_path)?
+        patch_firebase_service(&service_path, &decoded_dir)?
     } else {
         None
     };
@@ -167,13 +167,24 @@ fn inject_shim_dex(decoded_dir: &Path, shim_dex_path: Option<&Path>) -> Result<(
             println!("  Using pre-generated smali from: {}", smali_dir.display());
             copy_dir_recursive(smali_dir, &target_smali_dir)?;
         } else {
-            // Fall back to baksmali
-            let status = std::process::Command::new("baksmali")
-                .args(["d", "-o"])
-                .arg(&target_smali_dir)
-                .arg(&shim_dex)
-                .status()
-                .context("Failed to run baksmali. Is it installed? Or provide pre-generated smali files.")?;
+            // Fall back to baksmali - try BAKSMALI_JAR env var first (for nix develop)
+            let baksmali_jar = std::env::var("BAKSMALI_JAR");
+
+            let status = if let Ok(jar_path) = baksmali_jar {
+                std::process::Command::new("java")
+                    .args(["-jar", &jar_path, "d", "-o"])
+                    .arg(&target_smali_dir)
+                    .arg(&shim_dex)
+                    .status()
+                    .context("Failed to run baksmali via java -jar. Check BAKSMALI_JAR.")?
+            } else {
+                std::process::Command::new("baksmali")
+                    .args(["d", "-o"])
+                    .arg(&target_smali_dir)
+                    .arg(&shim_dex)
+                    .status()
+                    .context("Failed to run baksmali. Is it installed? Or provide pre-generated smali files.")?
+            };
 
             if !status.success() {
                 bail!("baksmali failed to disassemble shim DEX");
@@ -200,7 +211,7 @@ fn inject_shim_dex(decoded_dir: &Path, shim_dex_path: Option<&Path>) -> Result<(
 
 /// Patch the FirebaseMessagingService to call our shim
 /// Returns the fully-qualified class name of the service
-fn patch_firebase_service(service_path: &Path) -> Result<Option<String>> {
+fn patch_firebase_service(service_path: &Path, decoded_dir: &Path) -> Result<Option<String>> {
     let content = fs::read_to_string(service_path)?;
 
     // Extract the class name from the .class directive
@@ -216,9 +227,11 @@ fn patch_firebase_service(service_path: &Path) -> Result<Option<String>> {
     }
 
     // Find onNewToken method and inject our hook
+    // This hook REPLACES the token with bridge token if available
     let hook_code = r#"
-    # FCM2UP: Forward token to shim
-    invoke-static {p0, p1}, Lcom/fcm2up/Fcm2UpShim;->onToken(Landroid/content/Context;Ljava/lang/String;)V
+    # FCM2UP: Replace token with bridge token if available
+    invoke-static {p0, p1}, Lcom/fcm2up/Fcm2UpShim;->interceptToken(Landroid/content/Context;Ljava/lang/String;)Ljava/lang/String;
+    move-result-object p1
 "#;
 
     // Look for onNewToken method
@@ -248,7 +261,127 @@ fn patch_firebase_service(service_path: &Path) -> Result<Option<String>> {
     fs::write(service_path, new_content)?;
     println!("  Hooked onNewToken in Firebase service");
 
+    // Patch the parent class's onStartCommand to handle our special intent
+    // The parent class (d41/g or similar) has onStartCommand as final
+    patch_parent_on_start_command(decoded_dir)?;
+
     Ok(class_name)
+}
+
+/// Patch the parent class's onStartCommand to handle our INJECT_TOKEN action
+fn patch_parent_on_start_command(decoded_dir: &Path) -> Result<()> {
+    // Find the class that contains onStartCommand (d41/g.smali or similar)
+    let d41_dir = decoded_dir.join("smali_classes4").join("d41");
+    if !d41_dir.exists() {
+        // Try other smali directories
+        for i in 1..=6 {
+            let alt_dir = decoded_dir.join(format!("smali_classes{}", i)).join("d41");
+            if alt_dir.exists() {
+                return patch_on_start_command_in_dir(&alt_dir);
+            }
+        }
+        let main_dir = decoded_dir.join("smali").join("d41");
+        if main_dir.exists() {
+            return patch_on_start_command_in_dir(&main_dir);
+        }
+        println!("  Warning: Could not find d41 directory for onStartCommand patch");
+        return Ok(());
+    }
+    patch_on_start_command_in_dir(&d41_dir)
+}
+
+fn patch_on_start_command_in_dir(d41_dir: &Path) -> Result<()> {
+    // Find the file containing onStartCommand
+    for entry in fs::read_dir(d41_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.extension().map_or(false, |e| e == "smali") {
+            let content = fs::read_to_string(&path)?;
+            if content.contains("onStartCommand(Landroid/content/Intent;II)I") {
+                println!("  Found onStartCommand in: {:?}", path.file_name().unwrap());
+                let patched = patch_on_start_command_method(&content)?;
+                fs::write(&path, patched)?;
+                println!("  Patched onStartCommand for INJECT_TOKEN handling");
+                return Ok(());
+            }
+        }
+    }
+    println!("  Warning: Could not find onStartCommand method to patch");
+    Ok(())
+}
+
+fn patch_on_start_command_method(content: &str) -> Result<String> {
+    // Find the onStartCommand method and inject our check at the beginning
+    // We need to check for our action BEFORE the original logic runs
+    // IMPORTANT: We must check if p0 is the correct service type before calling its methods
+    // because d41/g is the base class for ALL Firebase services
+
+    let inject_code = r#"
+    # FCM2UP: Check for pending token on every service start
+    # First check if this is the GitHub push service (not some other Firebase service)
+    instance-of v0, p0, Lcom/github/android/pushnotifications/PushNotificationsService;
+    if-eqz v0, :fcm2up_skip_inject
+
+    # Check for pending bridge token via shim
+    invoke-static {p0}, Lcom/fcm2up/Fcm2UpShim;->getPendingBridgeToken(Landroid/content/Context;)Ljava/lang/String;
+    move-result-object v0
+
+    if-eqz v0, :fcm2up_check_action
+
+    # Found pending token! Call onNewToken with it
+    move-object v3, p0
+    check-cast v3, Lcom/github/android/pushnotifications/PushNotificationsService;
+    invoke-virtual {v3, v0}, Lcom/github/android/pushnotifications/PushNotificationsService;->d(Ljava/lang/String;)V
+
+    # Don't return early - let normal processing continue so the service works normally
+
+    :fcm2up_check_action
+    # Also check for explicit INJECT_TOKEN action (for immediate delivery when possible)
+    if-eqz p1, :fcm2up_skip_inject
+
+    invoke-virtual {p1}, Landroid/content/Intent;->getAction()Ljava/lang/String;
+    move-result-object v0
+
+    if-eqz v0, :fcm2up_skip_inject
+
+    const-string v1, "com.fcm2up.INJECT_TOKEN"
+    invoke-virtual {v0, v1}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
+    move-result v2
+
+    if-eqz v2, :fcm2up_skip_inject
+
+    # It's our action! Get the token and call onNewToken
+    const-string v1, "token"
+    invoke-virtual {p1, v1}, Landroid/content/Intent;->getStringExtra(Ljava/lang/String;)Ljava/lang/String;
+    move-result-object v0
+
+    if-eqz v0, :fcm2up_skip_inject
+
+    # Copy p0 to v3 and cast it (don't modify p0)
+    move-object v3, p0
+    check-cast v3, Lcom/github/android/pushnotifications/PushNotificationsService;
+    invoke-virtual {v3, v0}, Lcom/github/android/pushnotifications/PushNotificationsService;->d(Ljava/lang/String;)V
+
+    # Return START_REDELIVER_INTENT (3)
+    const/4 v0, 0x3
+    return v0
+
+    :fcm2up_skip_inject
+"#;
+
+    // Find the method and its .locals line
+    let pattern = r"(\.method[^\n]*onStartCommand\(Landroid/content/Intent;II\)I[^\n]*\n\s*\.locals\s+\d+)";
+    let re = Regex::new(pattern)?;
+
+    if re.is_match(content) {
+        let result = re.replace(content, |caps: &regex::Captures| {
+            format!("{}\n{}", &caps[1], inject_code)
+        });
+        Ok(result.to_string())
+    } else {
+        println!("  Warning: Could not find .locals in onStartCommand");
+        Ok(content.to_string())
+    }
 }
 
 /// Patch the Application class to initialize fcm2up
